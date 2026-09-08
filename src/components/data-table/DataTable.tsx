@@ -54,7 +54,13 @@ export function DataTable<TRow>({
   const someRowsSelected = selectedRowCount > 0 && !allRowsSelected
 
   return (
-    <div className="data-table-scroll" role="region" aria-label={caption}>
+    <div
+      className="data-table-scroll"
+      role="region"
+      aria-label={caption}
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Keyboard users need focus to scroll this region.
+      tabIndex={0}
+    >
       <table className={`data-table data-table--${density}`}>
         <caption className="visually-hidden">{caption}</caption>
         <thead>
