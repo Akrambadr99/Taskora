@@ -142,7 +142,7 @@ describe('workspace recovery', () => {
     const before = c.store.read()
     const controller = new AbortController(); controller.abort()
     await expect(c.gateway.restoreWorkspaceBackup(confirmation(view), { signal: controller.signal })).rejects.toMatchObject({ code: 'cancelled' })
-    const fail = vi.spyOn(c.store, 'commit').mockImplementationOnce(() => { throw new Error('Storage unavailable') })
+    const fail = vi.spyOn(c.store, 'restore').mockImplementationOnce(() => { throw new Error('Storage unavailable') })
     await expect(c.gateway.restoreWorkspaceBackup(confirmation(view))).rejects.toThrow('Storage unavailable')
     expect(c.store.read()).toEqual(before)
     expect(c.store.recoveryEpoch).toBe(0)

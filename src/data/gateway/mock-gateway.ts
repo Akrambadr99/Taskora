@@ -1,3 +1,4 @@
+import { StorageConflictError } from '../workspace-storage'
 import { exportWorkspace, parseWorkspaceArchive, mergeWorkspace, describeChanges, rebaseRevisions } from '../workspace-backup'
 import type { IssueRelation } from '../../domain'
 import type {
@@ -193,6 +194,7 @@ export class MockAtlasGateway implements AtlasGateway {
   private readonly simulator: RequestSimulator
   private readonly tracer: RequestTracer
   private requestSequence = 0
+  private reservedVersion = -1
   private recoveryPreview: { readonly view: WorkspaceRecoveryPreview; readonly data: AtlasDataSnapshot } | null = null
 
 
@@ -207,9 +209,12 @@ export class MockAtlasGateway implements AtlasGateway {
   }
 
   private reserveSnapshotIds(): void {
-    for (const rows of Object.values<readonly { readonly id: string }[]>({ ...this.store.read().data })) {
+    const snapshot = this.store.read()
+    if (snapshot.version === this.reservedVersion) return
+    for (const rows of Object.values<readonly { readonly id: string }[]>({ ...snapshot.data })) {
       this.ids.reserve(rows.map((row) => row.id))
     }
+    this.reservedVersion = snapshot.version
   }
 
   exportWorkspaceBackup(workspaceId: WorkspaceId, options?: RequestOptions): Promise<string> {
@@ -2939,11 +2944,14 @@ export class MockAtlasGateway implements AtlasGateway {
         throw new RequestCancelledError()
       }
 
-      if (recoveryEpoch !== this.store.recoveryEpoch) {
+      const result = await this.store.exclusive(() => {
+        if (options?.signal?.aborted === true) throw new RequestCancelledError()
+        if (recoveryEpoch !== this.store.recoveryEpoch) {
+          throw new GatewayConflictError('Workspace was recovered while this request was pending. Refresh and try again.')
+        }
         this.reserveSnapshotIds()
-        throw new GatewayConflictError('Workspace was recovered while this request was pending. Refresh and try again.')
-      }
-      const result = perform(requestId)
+        return perform(requestId)
+      })
       this.trace(requestId, operation, 'succeeded')
       return result
     } catch (error) {
@@ -3251,7 +3259,7 @@ export class MockAtlasGateway implements AtlasGateway {
     try {
       this.store.commit(version, data)
     } catch (error) {
-      if (error instanceof StaleSnapshotError) {
+      if (error instanceof StaleSnapshotError || error instanceof StorageConflictError) {
         throw new GatewayConflictError(
           'Another request committed data first. Refresh and try again.',
         )
@@ -3262,6 +3270,7 @@ export class MockAtlasGateway implements AtlasGateway {
   }
 
   private toGatewayError(error: unknown): GatewayError {
+    if (error instanceof StorageConflictError || error instanceof StaleSnapshotError) return new GatewayConflictError(error.message)
     if (error instanceof GatewayError) {
       return error
     }
