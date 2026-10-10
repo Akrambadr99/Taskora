@@ -96,6 +96,12 @@ export function assertValidSnapshot(snapshot: AtlasDataSnapshot): void {
     if (invitation.state === 'pending') pendingInvitationEmails.add(pendingKey)
   }
 
+  for (const status of snapshot.workflowStatuses) {
+    if (!projects.has(status.projectId)) {
+      throw new DataIntegrityError('workflowStatuses', 'Workflow states must reference an existing project.')
+    }
+  }
+
   for (const project of snapshot.projects) {
     assertProjectKey(project.key)
     const key = `${project.workspaceId}:${project.key}`
