@@ -1,0 +1,35 @@
+import { expect, test } from '@playwright/test'
+
+test('downloads a workspace archive, previews it and confirms recovery', async ({ page }) => {
+  await page.goto('/settings')
+  const downloaded = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download workspace backup' }).click()
+  const download = await downloaded
+  const path = await download.path()
+  if (!path) throw new Error('Expected downloaded backup')
+  await page.getByLabel('Workspace backup file').setInputFiles(path)
+  await page.getByRole('button', { name: 'Preview recovery' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Confirm workspace recovery' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Replace workspace data' })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await expect(dialog).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Preview recovery' })).toBeFocused()
+  await page.getByRole('button', { name: 'Preview recovery' }).click()
+  const input = dialog.getByRole('textbox', { name: /to confirm/ })
+  const label = await input.locator('..').innerText()
+  const name = label.replace(/^Type /, '').replace(/ to confirm$/, '').trim()
+  await input.fill(name)
+  await dialog.getByRole('button', { name: 'Replace workspace data' }).click()
+  await expect(page.getByText('Workspace restored. Current workspace views have been refreshed.')).toBeVisible()
+  await page.getByRole('link', { name: 'Issues', exact: true }).click()
+  await expect(page.getByRole('table', { name: 'Workspace issues' })).toBeVisible()
+})
+
+test('rejects malformed backup files without opening a confirmation dialog', async ({ page }) => {
+  await page.goto('/settings')
+  await page.getByLabel('Workspace backup file').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{broken') })
+  await page.getByRole('button', { name: 'Preview recovery' }).click()
+  await expect(page.getByRole('alert')).toContainText('not valid JSON')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})

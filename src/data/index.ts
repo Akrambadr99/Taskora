@@ -6,3 +6,5 @@ export * from './id-generator'
 export * from './snapshot'
 export * from './snapshot-validation'
 export * from './store'
+
+export { backupByteLimit } from './workspace-backup'

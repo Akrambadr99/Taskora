@@ -1,3 +1,4 @@
+import { WorkspaceBackupPanel } from './WorkspaceBackupPanel'
 import { useState, type ChangeEvent } from 'react'
 
 import {
@@ -159,6 +160,8 @@ export function SettingsPage() {
           {localError ? <p role="alert">{localError}</p> : null}
         </section>
       </div>
+
+      <WorkspaceBackupPanel />
 
       {status && !updateNotifications.isError ? (
         <p className="mutation-status" role="status">{status}</p>
