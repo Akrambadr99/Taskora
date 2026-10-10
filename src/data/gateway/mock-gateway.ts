@@ -1,5 +1,9 @@
+import type { IssueRelation } from '../../domain'
 import type {
   AtlasGateway,
+  IssueRelationshipData,
+  CreateIssueRelationInput,
+  RemoveIssueRelationInput,
   AddProjectMemberInput,
   ArchiveProjectInput,
   AuthorizationSession,
@@ -2412,6 +2416,103 @@ export class MockAtlasGateway implements AtlasGateway {
         ],
       })
       return deleted
+    })
+  }
+
+  getIssueRelationships(id: IssueId, options?: RequestOptions): Promise<IssueRelationshipData> {
+    return this.execute('issue.relationships.get', options, () => {
+      const data = this.store.read().data
+      const issue = data.issues.find((candidate) => candidate.id === id)
+      if (!issue) throw new EntityNotFoundError('Issue')
+      this.assertPermission('issue:view', issue.workspaceId, issue.projectId)
+      return {
+        issue,
+        projectIssues: data.issues.filter(({ projectId }) => projectId === issue.projectId),
+        relations: data.issueRelations.filter(({ sourceIssueId, targetIssueId }) =>
+          sourceIssueId === id || targetIssueId === id),
+      }
+    })
+  }
+
+  createIssueRelation(input: CreateIssueRelationInput, options?: RequestOptions): Promise<IssueRelation> {
+    return this.execute('issue.relation.create', options, (requestId) => {
+      if (!['blocks', 'relates-to', 'duplicates'].includes(input.type)) {
+        throw new InvalidGatewayRequestError('Unknown issue relationship type.')
+      }
+      const data = this.store.read().data
+      const duplicate = data.issueRelations.some((relation) => relation.type === input.type && (
+        (relation.sourceIssueId === input.sourceIssueId && relation.targetIssueId === input.targetIssueId) ||
+        (input.type === 'relates-to' && relation.sourceIssueId === input.targetIssueId && relation.targetIssueId === input.sourceIssueId)
+      ))
+      if (duplicate) throw new InvalidGatewayRequestError('That issue relationship already exists.')
+      let id = this.ids.issueRelation('relationship')
+      while (data.issueRelations.some((relation) => relation.id === id)) {
+        id = this.ids.issueRelation('relationship')
+      }
+      const relation: IssueRelation = {
+        id, sourceIssueId: input.sourceIssueId, targetIssueId: input.targetIssueId, type: input.type,
+      }
+      this.changeIssueRelation(relation, input, false, requestId)
+      return relation
+    })
+  }
+
+  removeIssueRelation(input: RemoveIssueRelationInput, options?: RequestOptions): Promise<void> {
+    return this.execute('issue.relation.remove', options, (requestId) => {
+      const relation = this.store.read().data.issueRelations.find(({ id }) => id === input.id)
+      if (!relation) throw new EntityNotFoundError('Issue relationship')
+      this.changeIssueRelation(relation, input, true, requestId)
+    })
+  }
+
+  private changeIssueRelation(
+    relation: IssueRelation,
+    revisions: Pick<CreateIssueRelationInput, 'expectedSourceRevision' | 'expectedTargetRevision'>,
+    remove: boolean,
+    requestId: string,
+  ): void {
+    const current = this.store.read()
+    const source = current.data.issues.find(({ id }) => id === relation.sourceIssueId)
+    const target = current.data.issues.find(({ id }) => id === relation.targetIssueId)
+    if (!source || !target) throw new EntityNotFoundError('Issue')
+    this.assertPermission('issue:update', source.workspaceId, source.projectId)
+    this.assertPermission('issue:update', target.workspaceId, target.projectId)
+    this.assertProjectOpen(current.data, source.projectId)
+    if (source.id === target.id || source.projectId !== target.projectId || source.workspaceId !== target.workspaceId) {
+      throw new InvalidGatewayRequestError('Relationships require two different issues in the same project.')
+    }
+    if (source.revision !== revisions.expectedSourceRevision || target.revision !== revisions.expectedTargetRevision) {
+      throw new GatewayConflictError('An issue changed. Refresh the relationships and try again.')
+    }
+    const occurredAt = this.clock.now()
+    const action = remove ? 'issue.relationship.removed' : 'issue.relationship.created'
+    const summary = `${remove ? 'Removed' : 'Added'} ${relation.type}: ${this.issueReference(current.data, source)} to ${this.issueReference(current.data, target)}`
+    const activity = [source, target].map((issue): ActivityEvent => {
+      let id = this.ids.activity('relationship')
+      while (current.data.activityEvents.some((event) => event.id === id)) {
+        id = this.ids.activity('relationship')
+      }
+      return { id, workspaceId: source.workspaceId, actorId: this.actorId,
+        entityKind: 'issue', entityId: issue.id, action, occurredAt, summary }
+    })
+    let auditId = this.ids.audit('relationship')
+    while (current.data.auditEvents.some((event) => event.id === auditId)) {
+      auditId = this.ids.audit('relationship')
+    }
+    this.commit(current.version, {
+      ...current.data,
+      issues: current.data.issues.map((issue) => issue.id === source.id || issue.id === target.id
+        ? { ...issue, revision: issue.revision + 1, updatedAt: occurredAt } : issue),
+      issueRelations: remove
+        ? current.data.issueRelations.filter(({ id }) => id !== relation.id)
+        : [...current.data.issueRelations, relation],
+      activityEvents: [...current.data.activityEvents, ...activity],
+      auditEvents: [...current.data.auditEvents, {
+        id: auditId, workspaceId: source.workspaceId,
+        actorId: this.actorId, requestId, action, outcome: 'succeeded', occurredAt,
+        metadata: { relationId: relation.id, sourceIssueId: source.id, targetIssueId: target.id,
+          type: relation.type, sourceRevision: source.revision + 1, targetRevision: target.revision + 1 },
+      }],
     })
   }
 
