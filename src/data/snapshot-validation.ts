@@ -128,13 +128,22 @@ export function assertValidSnapshot(snapshot: AtlasDataSnapshot): void {
     }
   }
 
+  const projectMemberOwners = new Set<string>()
   for (const projectMember of snapshot.projectMembers) {
-    if (!projects.has(projectMember.projectId) || !users.has(projectMember.userId)) {
+    const project = projects.get(projectMember.projectId)
+    const ownerKey = `${projectMember.projectId}:${projectMember.userId}`
+    if (
+      !project ||
+      !users.has(projectMember.userId) ||
+      !workspaceMembershipUsers.has(`${project.workspaceId}:${projectMember.userId}`) ||
+      projectMemberOwners.has(ownerKey)
+    ) {
       throw new DataIntegrityError(
         'projectMembers',
-        'Project members must reference an existing project and user.',
+        'Project members must be unique per project/user and belong to the project workspace.',
       )
     }
+    projectMemberOwners.add(ownerKey)
   }
 
   const projectSubscriptionOwners = new Set<string>()
