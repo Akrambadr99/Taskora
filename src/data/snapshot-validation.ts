@@ -188,9 +188,10 @@ export function assertValidSnapshot(snapshot: AtlasDataSnapshot): void {
     if (
       project?.workspaceId !== issue.workspaceId ||
       status?.projectId !== issue.projectId ||
-      (issue.assigneeId !== null && !users.has(issue.assigneeId)) ||
+      (issue.assigneeId !== null && !workspaceMembershipUsers.has(`${issue.workspaceId}:${issue.assigneeId}`)) ||
       (issue.parentIssueId !== null && parent?.projectId !== issue.projectId) ||
       hasInvalidLabel ||
+      new Set(issue.labelIds).size !== issue.labelIds.length ||
       issue.number < 1 ||
       !Number.isSafeInteger(issue.number) ||
       issue.revision < 1 ||
@@ -262,7 +263,21 @@ export function assertValidSnapshot(snapshot: AtlasDataSnapshot): void {
     deliveredMentions.add(recipientKey)
   }
 
+  const liveEntityWorkspaces = new Map<string, string>([
+    ...snapshot.workspaces.map((row) => [row.id, row.id] as const),
+    ...snapshot.projects.map((row) => [row.id, row.workspaceId] as const),
+    ...snapshot.issues.map((row) => [row.id, row.workspaceId] as const),
+    ...snapshot.memberships.map((row) => [row.id, row.workspaceId] as const),
+    ...snapshot.workspaceInvitations.map((row) => [row.id, row.workspaceId] as const),
+    ...snapshot.comments.map((row) => [row.id, issues.get(row.issueId)?.workspaceId ?? ''] as const),
+  ])
+
   for (const activity of snapshot.activityEvents) {
+    const targetWorkspace = liveEntityWorkspaces.get(activity.entityId)
+    // Deleted entities remain legitimate historical targets; live targets cannot cross workspaces.
+    if (targetWorkspace !== undefined && targetWorkspace !== activity.workspaceId) {
+      throw new DataIntegrityError('activityEvents', 'Live activity targets must belong to the event workspace.')
+    }
     if (!workspaces.has(activity.workspaceId) || !users.has(activity.actorId)) {
       throw new DataIntegrityError(
         'activityEvents',
@@ -299,7 +314,7 @@ export function assertValidSnapshot(snapshot: AtlasDataSnapshot): void {
         target.id.length > 0 &&
         target.id.trim() === target.id)
     if (
-      !users.has(notification.recipientId) ||
+      !workspaceMembershipUsers.has(`${notification.workspaceId}:${notification.recipientId}`) ||
       !workspaces.has(notification.workspaceId) ||
       !targetIsValid
     ) {
@@ -314,7 +329,7 @@ export function assertValidSnapshot(snapshot: AtlasDataSnapshot): void {
   for (const preference of snapshot.notificationPreferences) {
     const ownerKey = `${preference.workspaceId}:${preference.userId}`
     if (
-      !users.has(preference.userId) ||
+      !workspaceMembershipUsers.has(`${preference.workspaceId}:${preference.userId}`) ||
       !workspaces.has(preference.workspaceId) ||
       !Number.isSafeInteger(preference.revision) ||
       preference.revision < 1 ||

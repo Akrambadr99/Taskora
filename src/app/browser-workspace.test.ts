@@ -5,6 +5,22 @@ import { workspaceStorageKey, type WorkspaceLocks } from '../data'
 const locks: WorkspaceLocks = { request: <T,>(_name: string, action: () => T): Promise<T> => Promise.resolve(action()) }
 
 describe('browser workspace lifecycle', () => {
+  it('does not switch identities when the configured administrator is demoted', async () => {
+    window.localStorage.removeItem(workspaceStorageKey)
+    const first = openBrowserWorkspace(window.localStorage, locks)
+    const actorId = first.services.session.user.id
+    await first.store.exclusive(() => {
+      const current = first.store.read()
+      first.store.commit(current.version, { ...current.data, memberships: current.data.memberships.map((row) =>
+        row.userId === actorId ? { ...row, role: 'member', revision: row.revision + 1 } : row) })
+    })
+    const reopened = openBrowserWorkspace(window.localStorage, locks)
+    expect(reopened.services.session.user.id).toBe(actorId)
+    expect(reopened.services.session.workspaceMembership.role).toBe('member')
+    await expect(reopened.services.gateway.exportWorkspaceBackup(reopened.services.workspaceId)).rejects.toMatchObject({ code: 'forbidden' })
+    window.localStorage.removeItem(workspaceStorageKey)
+  })
+
   it('requires cross-tab locking instead of silently accepting unsafe writes', () => {
     expect(() => openBrowserWorkspace(window.localStorage, undefined)).toThrow('Web Locks')
   })
