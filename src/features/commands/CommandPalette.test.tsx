@@ -177,10 +177,10 @@ describe('CommandPalette', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByTestId('location')).toHaveTextContent(
+        `/issues?project=${project.id}`,
+      )
     })
-    expect(screen.getByTestId('location')).toHaveTextContent(
-      `/issues?project=${project.id}`,
-    )
     expect(screen.getByTestId('location')).not.toHaveTextContent('status=')
     expect(services.preferences.getSnapshot().savedIssueViews[0]?.state)
       .toMatchObject({ projectId: project.id, statusId: null })
