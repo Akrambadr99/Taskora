@@ -88,6 +88,7 @@ import { SystemClock, type Clock } from '../clock'
 import { DeterministicIdGenerator } from '../id-generator'
 import type { AtlasDataSnapshot } from '../snapshot'
 import { StaleSnapshotError, type InMemoryDataStore } from '../store'
+import { completedIssuesWithOpenBlockers, unresolvedBlockers } from '../workflow-transitions'
 import {
   can,
   getPermissionFingerprint,
@@ -1147,6 +1148,14 @@ export class MockAtlasGateway implements AtlasGateway {
         if (!statusId) throw new GatewayConflictError('Issue migration target is unavailable.')
         return { ...issue, statusId, revision: issue.revision + 1, updatedAt: occurredAt }
       })
+      if (completedIssuesWithOpenBlockers(issues, current.data.issueRelations, [
+        ...current.data.workflowStatuses.filter(({ projectId }) => projectId !== project.id),
+        ...normalized,
+      ]).length > 0) {
+        throw new InvalidGatewayRequestError(
+          'The workflow change would leave a completed issue with an unfinished blocker.',
+        )
+      }
       const statusNames = new Map(normalized.map(({ id, name }) => [id, name]))
       const projectNotifications = this.buildProjectUpdateNotifications(
         current.data,
@@ -2572,6 +2581,13 @@ export class MockAtlasGateway implements AtlasGateway {
     if (source.revision !== revisions.expectedSourceRevision || target.revision !== revisions.expectedTargetRevision) {
       throw new GatewayConflictError('An issue changed. Refresh the relationships and try again.')
     }
+    if (!remove && relation.type === 'blocks' &&
+      current.data.workflowStatuses.find(({ id }) => id === target.statusId)?.category === 'completed' &&
+      current.data.workflowStatuses.find(({ id }) => id === source.statusId)?.category !== 'completed') {
+      throw new InvalidGatewayRequestError(
+        'Complete the blocking issue before linking it to completed work.',
+      )
+    }
     const occurredAt = this.clock.now()
     const action = remove ? 'issue.relationship.removed' : 'issue.relationship.created'
     const summary = `${remove ? 'Removed' : 'Added'} ${relation.type}: ${this.issueReference(current.data, source)} to ${this.issueReference(current.data, target)}`
@@ -2714,6 +2730,35 @@ export class MockAtlasGateway implements AtlasGateway {
         throw new InvalidGatewayRequestError(
           'Issues must use a status from their project workflow.',
         )
+      }
+
+      if (nextStatusId !== issue.statusId) {
+        const prospectiveIssues = current.data.issues.map((candidate) =>
+          candidate.id === issue.id ? { ...candidate, statusId: nextStatusId } : candidate,
+        )
+        const affectedIds = new Set([
+          issue.id,
+          ...current.data.issueRelations
+            .filter((relation) => relation.type === 'blocks' && relation.sourceIssueId === issue.id)
+            .map((relation) => relation.targetIssueId),
+        ])
+        const blocked = completedIssuesWithOpenBlockers(
+          prospectiveIssues,
+          current.data.issueRelations,
+          current.data.workflowStatuses,
+        ).filter((candidate) => affectedIds.has(candidate.id))
+        const blockedIssue = blocked[0]
+        if (blockedIssue) {
+          const blocker = unresolvedBlockers(
+            blockedIssue.id,
+            prospectiveIssues,
+            current.data.issueRelations,
+            current.data.workflowStatuses,
+          )[0]
+          throw new InvalidGatewayRequestError(
+            `Complete ${blocker ? this.issueReference(current.data, blocker) : 'the blocking issue'} before moving dependent work to a completed stage.`,
+          )
+        }
       }
 
       const occurredAt = this.clock.now()

@@ -133,6 +133,28 @@ describe('BoardPage', () => {
     })
   })
 
+  it('restores a blocked completion and explains the prerequisite to keyboard users', async () => {
+    const user = userEvent.setup()
+    renderBoard()
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Project' }),
+      screen.getByRole('option', { name: 'Launch readiness' }),
+    )
+    const moveControl = await screen.findByRole('combobox', {
+      name: 'Move Complete launch risk review',
+    })
+    await user.selectOptions(moveControl, within(moveControl).getByRole('option', { name: 'Done' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Complete OPS-1 before moving dependent work to a completed stage.',
+    )
+    await waitFor(() => {
+      expect(moveControl).toHaveValue(
+        within(moveControl).getByRole('option', { name: 'Backlog' }).getAttribute('value'),
+      )
+    })
+  })
+
   it('moves an issue with a pointer drag and restores focus to its handle', async () => {
     renderBoard()
     const issue = createAtlasFixtures().issues.find(
