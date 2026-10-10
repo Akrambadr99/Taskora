@@ -8,6 +8,7 @@ import {
 import { Link, useParams } from 'react-router-dom'
 
 import { ModalDialog } from '../../components/dialog/ModalDialog'
+import { useBoardMetadata } from '../../features/board/board-queries'
 import { GatewayConflictError } from '../../data'
 import { IssueRelationshipsPanel } from '../../features/issues/IssueRelationshipsPanel'
 import { CommentItem } from '../../features/comments/CommentItem'
@@ -542,6 +543,10 @@ function IssueEditDialog({
   onSaved,
 }: Readonly<{ issue: Issue; onClose: () => void; onSaved: () => void }>) {
   const update = useOptimisticIssueUpdate(issue.id)
+  const workflow = useBoardMetadata()
+  const statuses = workflow.data?.projects.find(({ project }) =>
+    project.id === issue.projectId)?.statuses ?? []
+  const [statusId, setStatusId] = useState(issue.statusId)
   const [draft, setDraft] = useState<IssueEditDraft>(() => ({
     title: issue.title,
     description: issue.description,
@@ -561,7 +566,13 @@ function IssueEditDialog({
     if (!validation.changes) return
 
     update.mutate(
-      { issue, changes: validation.changes },
+      {
+        issue,
+        changes: {
+          ...validation.changes,
+          ...(statusId !== issue.statusId ? { statusId } : {}),
+        },
+      },
       {
         onSuccess: onSaved,
         onError: (error) => {
@@ -610,6 +621,22 @@ function IssueEditDialog({
           />
         </FormField>
         <div className="issue-edit-form__row">
+          <FormField label="Status">
+            <select
+              value={statusId}
+              disabled={workflow.isPending || workflow.isError || statuses.length === 0}
+              onChange={(event) => {
+                const selected = statuses.find(({ id }) => id === event.currentTarget.value)
+                if (selected) setStatusId(selected.id)
+              }}
+            >
+              {statuses.length === 0 ? (
+                <option value={issue.statusId}>Current status</option>
+              ) : statuses.map((status) => (
+                <option key={status.id} value={status.id}>{status.name}</option>
+              ))}
+            </select>
+          </FormField>
           <FormField label="Priority">
             <select
               value={draft.priority}
@@ -636,6 +663,9 @@ function IssueEditDialog({
             />
           </FormField>
         </div>
+        {workflow.isError ? (
+          <p role="alert">Workflow stages are unavailable. Other issue fields can still be edited.</p>
+        ) : null}
         {submitError ? (
           <p className="form-error" role="alert">
             {submitError}

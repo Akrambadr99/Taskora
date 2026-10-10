@@ -94,7 +94,7 @@ describe('IssueDetailPage', () => {
   it('loads a deep-linked issue and edits validated fields', async () => {
     const user = userEvent.setup()
     const issue = getFixtureIssue()
-    renderIssueDetail(`/issues/${issue.id}`)
+    const services = renderIssueDetail(`/issues/${issue.id}`)
 
     expect(screen.getByText('Loading issue…')).toBeVisible()
     expect(await screen.findByRole('heading', { name: issue.title })).toBeVisible()
@@ -113,6 +113,9 @@ describe('IssueDetailPage', () => {
     expect(screen.getByText('Enter an issue title.')).toBeVisible()
 
     await user.type(title, 'Publish the final launch brief')
+    const status = screen.getByRole('combobox', { name: 'Status' })
+    await waitFor(() => { expect(status).toBeEnabled() })
+    await user.selectOptions(status, within(status).getByRole('option', { name: 'Done' }))
     await user.selectOptions(screen.getByLabelText('Priority'), 'high')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
@@ -122,7 +125,30 @@ describe('IssueDetailPage', () => {
     ).toBeVisible()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(editButton).toHaveFocus()
+    const updatedIssue = await services.gateway.getIssue(issue.id)
+    expect(updatedIssue.statusId).toBe(
+      createAtlasFixtures().workflowStatuses.find(({ projectId, name }) =>
+        projectId === issue.projectId && name === 'Done')?.id,
+    )
   }, 10_000)
+
+  it('keeps the issue editor open when an unfinished blocker rejects completion', async () => {
+    const user = userEvent.setup()
+    const issue = createAtlasFixtures().issues.find(({ title }) => title.includes('risk review'))
+    if (!issue) throw new Error('Expected blocked issue fixture.')
+    const services = renderIssueDetail(`/issues/${issue.id}`)
+
+    await screen.findByRole('heading', { name: issue.title })
+    await user.click(screen.getByRole('button', { name: 'Edit issue' }))
+    const status = await screen.findByRole('combobox', { name: 'Status' })
+    await waitFor(() => { expect(status).toBeEnabled() })
+    await user.selectOptions(status, within(status).getByRole('option', { name: 'Done' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Complete OPS-1')
+    expect(screen.getByRole('dialog', { name: 'Edit issue' })).toBeVisible()
+    expect((await services.gateway.getIssue(issue.id)).statusId).toBe(issue.statusId)
+  })
 
   it('refreshes after a revision conflict and preserves the draft for retry', async () => {
     const user = userEvent.setup()
