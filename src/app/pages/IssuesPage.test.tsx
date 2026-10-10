@@ -644,6 +644,45 @@ describe('IssuesPage', () => {
     expect(screen.queryByLabelText('Bulk issue actions')).not.toBeInTheDocument()
   })
 
+  it('applies same-project workflow changes and retains blocked items for retry', async () => {
+    const user = userEvent.setup()
+    const { services } = renderIssues()
+    const fixtures = createAtlasFixtures()
+    const blocker = fixtures.issues.find(({ title }) => title.includes('launch readiness brief'))
+    const dependent = fixtures.issues.find(({ title }) => title.includes('risk review'))
+    if (!blocker || !dependent) throw new Error('Expected dependent launch issues.')
+
+    await screen.findByRole('table', { name: 'Workspace issues' })
+    await user.click(screen.getByRole('checkbox', { name: `Select ${dependent.title}` }))
+    const status = screen.getByRole('combobox', { name: 'Set status' })
+    await user.selectOptions(status, within(status).getByRole('option', { name: 'Done' }))
+    await user.click(screen.getByRole('button', { name: 'Apply status' }))
+    expect(await screen.findByText(/1 issue failed and remains selected.*Complete OPS-1/)).toBeVisible()
+    expect((await services.gateway.getIssue(dependent.id)).statusId).toBe(dependent.statusId)
+
+    const done = fixtures.workflowStatuses.find(({ projectId, category }) =>
+      projectId === blocker.projectId && category === 'completed')
+    if (!done) throw new Error('Expected completed workflow stage.')
+    await services.gateway.updateIssue({
+      id: blocker.id, expectedRevision: blocker.revision, changes: { statusId: done.id },
+    })
+    await user.click(screen.getByRole('button', { name: 'Apply status' }))
+    expect(await screen.findByText('1 issue updated.')).toBeVisible()
+    expect((await services.gateway.getIssue(dependent.id)).statusId).toBe(done.id)
+  })
+
+  it('limits the bulk status control to a single project', async () => {
+    const user = userEvent.setup()
+    renderIssues()
+    await screen.findByRole('table', { name: 'Workspace issues' })
+    await user.click(screen.getByRole('checkbox', { name: 'Select Publish the launch readiness brief' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByText('Page 2 of 2')
+    await user.click(screen.getByRole('checkbox', { name: 'Select Tune restart anomaly alerts' }))
+    expect(screen.queryByRole('button', { name: 'Apply status' })).not.toBeInTheDocument()
+    expect(screen.getByText(/Select issues from one project/)).toBeVisible()
+  })
+
   it('keeps a failed bulk item selected and retries it with refreshed data', async () => {
     const user = userEvent.setup()
     let shouldFail = true
