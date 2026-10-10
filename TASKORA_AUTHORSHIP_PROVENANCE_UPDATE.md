@@ -24,3 +24,7 @@ The file-level commit inventory is in TASKORA_IMPLEMENTATION_CHANGELOG.md. Git d
 The owner states that they personally wrote implementation in early Taskora development; that declaration is preserved. OpenAI Codex generated the new runtime schemas, recovery contract/gateway/UI, persistence and synchronization implementation, integrity refinements, tests, measurement tool and documentation in this continuation. The authorized Git author identity does not mean the owner personally typed these additions.
 
 The original 80-commit history and hashes were retained. Worktree-specific identity configuration uses the authorized name/email above; no global identity or original author records were changed. Every new commit includes an AI-Assistance disclosure. Current measured source grows from 32,191 to 33,704 (+1,513 net). This is neither an exact human/AI percentage nor a claim of predominantly human-written code.
+
+## Workflow continuation
+
+OpenAI Codex generated the completion blocker policy, gateway enforcement, detail and bulk status controls, regression tests and workflow documentation at the owner's direction. These additions retain explicit AI-Assistance commit disclosures. The current source measurement is 34,011 candidate SLOC; the 307-line net workflow growth does not relabel assistant-generated contributions as human-written. Historical commit hashes and dates remain preserved.

@@ -1,0 +1,9 @@
+# Issue workflow transitions
+
+Taskora now treats a directed `blocks` link as a prerequisite for completion. An issue cannot move to a workflow stage whose category is `completed` while any incoming blocker is outside a `completed` stage. A canceled blocker remains unresolved. A completed blocker cannot be reopened while it is still required by completed work. Adding a new unfinished blocker to completed work is rejected. Workflow reconfiguration and status migrations are checked against the resulting issue and stage graph before the snapshot is committed.
+
+These checks run in the gateway after the current actor's `issue:update` or project-workflow permission and expected revision checks. The board, issue detail editor, and same-project bulk status action all call that gateway. A rejected write leaves issue revisions, history, notifications, and saved workspace state unchanged. Successful issue status moves continue to produce issue activity and audit records. Stale edits still return a conflict.
+
+The board restores the prior card state and announces the blocking issue. The detail dialog retains the draft and shows the reason. The bulk action applies selected issues independently, keeps failures selected with refreshed revisions, and reports the first failure for retry. Selections from multiple projects cannot share one status picker. The bulk action is intentionally not an all-or-nothing transaction; a blocker and dependent selected together may need a second pass if the dependent is attempted first.
+
+The guard applies to new mutations. Existing or imported historical snapshots receive structural and reference validation, but are not silently rewritten to satisfy this new operational policy. Cross-project blocking links remain unsupported. The local browser permission model is not server authentication.

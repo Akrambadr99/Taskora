@@ -10,7 +10,7 @@ A mutation waits for the simulator, enters the store transaction, synchronizes p
 
 Workspace: users, workspace memberships and invitations. Projects: lifecycle, project memberships, leadership, subscriptions and workflow statuses. Issues: priority/type/status, labels, assignee, parent, revision, directed or symmetric relationships and subscriptions. Collaboration: comments, mentions, activity and audit events, notifications and preferences.
 
-Workflow configuration and project lifecycle are established surfaces. Existing bulk mutations, optimistic rollback and authorization refresh remain intact. The new relationship editor deliberately waits for authoritative mutation results instead of optimistically displaying an unvalidated graph.
+Workflow configuration and project lifecycle are established surfaces. Existing bulk mutations, optimistic rollback and authorization refresh remain intact. The relationship editor deliberately waits for authoritative mutation results instead of optimistically displaying an unvalidated graph. Completion checks now use the directed blocker graph; see [workflow transitions](TASKORA_WORKFLOW_TRANSITIONS.md).
 
 ## Graph invariants
 
@@ -32,4 +32,4 @@ Relationship query keys are beneath the workspace issue namespace. Mutations can
 
 ## Boundaries
 
-No server authentication, hosted database, email delivery or remote collaboration service was added. Local permissions model intended behavior; a browser owner can inspect or alter browser state. Dependencies remain advisory; cross-project links and transition-guard policies are not implemented. Versioned workspace recovery and bounded browser persistence are now implemented. See [recovery and persistence](TASKORA_RECOVERY_AND_PERSISTENCE.md) for contracts, transaction ordering and limitations.
+No server authentication, hosted database, email delivery or remote collaboration service was added. Local permissions model intended behavior; a browser owner can inspect or alter browser state. Cross-project links remain unsupported. Versioned workspace recovery and bounded browser persistence are implemented. See [recovery and persistence](TASKORA_RECOVERY_AND_PERSISTENCE.md) for contracts, transaction ordering and limitations.

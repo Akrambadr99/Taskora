@@ -213,7 +213,9 @@ Both endpoint revisions are checked before relationship writes. Invalid cycles,
 stale writes and denied access leave the data and success history unchanged.
 Parent hierarchies are validated on every snapshot commit, and iterative graph
 validation handles long dependency chains without recursive stack overflow.
-Links are advisory; they do not prevent completing a blocked issue.
+Blocking links now prevent completing dependent work while prerequisites remain
+unfinished. See [workflow transitions](TASKORA_WORKFLOW_TRANSITIONS.md) for the
+current policy and bulk retry behavior.
 
 The original relationship increment passed 380 Vitest tests, 25 Chromium journeys, lint,
 types, production build and npm audit (zero reported vulnerabilities). Line
@@ -223,6 +225,7 @@ historical baseline. These additions are AI-generated and are disclosed in the
 
 See the [engineering roadmap](TASKORA_40K_ENGINEERING_ROADMAP.md),
 [core architecture](TASKORA_CORE_ARCHITECTURE.md),
+[workflow transitions](TASKORA_WORKFLOW_TRANSITIONS.md),
 [implementation changelog](TASKORA_IMPLEMENTATION_CHANGELOG.md),
 [domain/data tests](TASKORA_DOMAIN_AND_DATA_TEST_REPORT.md),
 [full verification](TASKORA_FULL_VERIFICATION_RESULTS.md),
@@ -231,7 +234,13 @@ See the [engineering roadmap](TASKORA_40K_ENGINEERING_ROADMAP.md),
 The recovery/persistence/integrity increment passes 431 Vitest tests, 31 Chromium
 journeys, lint, types, coverage thresholds, production build and npm audit with
 zero reported vulnerabilities. Line coverage is 92.13%. The inclusive first-party
-candidate count is **33,704**; the 40K planning target remains open.
+candidate count for that increment was **33,704**.
+
+The current workflow increment passes **438 Vitest tests and 32 Chromium tests**,
+lint, TypeScript, coverage thresholds, production build and a zero-vulnerability
+dependency audit. Current candidate source is **34,011 SLOC**. See the
+[workflow verification](TASKORA_WORKFLOW_VERIFICATION.md) for results and scope.
+The 40K planning target remains open.
 
 ## Limitations and maintenance
 
