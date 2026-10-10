@@ -1187,6 +1187,28 @@ describe('MockAtlasGateway', () => {
     })
   })
 
+  it('rejects workflow category changes that complete blocked issues', async () => {
+    const { fixtures, gateway, store } = createGateway()
+    const project = fixtures.projects.find(({ key }) => key === 'OPS')
+    const statuses = fixtures.workflowStatuses
+      .filter(({ projectId }) => projectId === project?.id)
+      .sort((left, right) => left.order - right.order)
+    if (!project || statuses.length !== 3) throw new Error('Expected launch workflow.')
+
+    const before = store.read()
+    await expect(gateway.updateProjectWorkflow({
+      projectId: project.id,
+      expectedProjectRevision: project.revision,
+      statuses: statuses.map((status, index) => ({
+        id: status.id,
+        name: status.name,
+        category: index === 0 ? 'completed' as const : status.category,
+      })),
+      migrations: [],
+    })).rejects.toThrow('unfinished blocker')
+    expect(store.read()).toEqual(before)
+  })
+
   it('refuses to retire referenced workflow statuses without an explicit migration', async () => {
     const { fixtures, gateway, store } = createGateway()
     const project = fixtures.projects[0]
@@ -1877,6 +1899,49 @@ describe('MockAtlasGateway', () => {
     expect(store.read().data.issues.find(({ id }) => id === issue.id)?.statusId).toBe(
       targetStatus.id,
     )
+  })
+
+  it('requires blocking issues to be completed before their dependents', async () => {
+    const { fixtures, gateway, store } = createGateway()
+    const relation = fixtures.issueRelations.find(({ type }) => type === 'blocks')
+    const blocker = fixtures.issues.find(({ id }) => id === relation?.sourceIssueId)
+    const dependent = fixtures.issues.find(({ id }) => id === relation?.targetIssueId)
+    const completed = fixtures.workflowStatuses.find(({ projectId, category }) =>
+      projectId === dependent?.projectId && category === 'completed')
+    if (!blocker || !dependent || !completed) throw new Error('Expected blocking fixtures.')
+
+    const before = store.read()
+    await expect(gateway.updateIssue({
+      id: dependent.id, expectedRevision: dependent.revision, changes: { statusId: completed.id },
+    })).rejects.toThrow(/Complete .* before moving dependent work/)
+    expect(store.read()).toEqual(before)
+
+    const finishedBlocker = await gateway.updateIssue({
+      id: blocker.id, expectedRevision: blocker.revision, changes: { statusId: completed.id },
+    })
+    const finishedDependent = await gateway.updateIssue({
+      id: dependent.id, expectedRevision: dependent.revision, changes: { statusId: completed.id },
+    })
+    expect(finishedDependent.statusId).toBe(completed.id)
+    await expect(gateway.updateIssue({
+      id: blocker.id, expectedRevision: finishedBlocker.revision,
+      changes: { statusId: blocker.statusId },
+    })).rejects.toThrow(/Complete .* before moving dependent work/)
+    expect(store.read().data.issues.find(({ id }) => id === blocker.id)?.statusId).toBe(completed.id)
+  })
+
+  it('rejects adding an unfinished blocker to already completed work', async () => {
+    const { fixtures, gateway, store } = createGateway()
+    const source = fixtures.issues.find(({ title }) => title.includes('risk review'))
+    const target = fixtures.issues.find(({ title }) => title.includes('runbook'))
+    if (!source || !target) throw new Error('Expected launch issues.')
+
+    const before = store.read()
+    await expect(gateway.createIssueRelation({
+      sourceIssueId: source.id, targetIssueId: target.id, type: 'blocks',
+      expectedSourceRevision: source.revision, expectedTargetRevision: target.revision,
+    })).rejects.toThrow('Complete the blocking issue')
+    expect(store.read()).toEqual(before)
   })
 
   it('creates a comment with deterministic activity and audit records', async () => {

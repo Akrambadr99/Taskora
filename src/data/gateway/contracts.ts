@@ -1,5 +1,9 @@
+import type { CollectionChange } from '../workspace-backup'
 import type {
   Issue,
+  IssueRelation,
+  IssueRelationId,
+  IssueRelationType,
   ActivityEvent,
   AuditEvent,
   Comment,
@@ -720,7 +724,30 @@ export interface ProjectGateway {
   ): Promise<Project>
 }
 
+export interface IssueRelationshipData {
+  readonly issue: Issue
+  readonly projectIssues: readonly Issue[]
+  readonly relations: readonly IssueRelation[]
+}
+
+export interface CreateIssueRelationInput {
+  readonly sourceIssueId: IssueId
+  readonly targetIssueId: IssueId
+  readonly type: IssueRelationType
+  readonly expectedSourceRevision: number
+  readonly expectedTargetRevision: number
+}
+
+export interface RemoveIssueRelationInput {
+  readonly id: IssueRelationId
+  readonly expectedSourceRevision: number
+  readonly expectedTargetRevision: number
+}
+
 export interface IssueGateway {
+  getIssueRelationships(id: IssueId, options?: RequestOptions): Promise<IssueRelationshipData>
+  createIssueRelation(input: CreateIssueRelationInput, options?: RequestOptions): Promise<IssueRelation>
+  removeIssueRelation(input: RemoveIssueRelationInput, options?: RequestOptions): Promise<void>
   listIssues(query: IssueQuery, options?: RequestOptions): Promise<Page<Issue>>
   getIssue(id: IssueId, options?: RequestOptions): Promise<Issue>
   getIssueFilterMetadata(
@@ -809,8 +836,24 @@ export interface NotificationGateway {
   ): Promise<NotificationPreferences>
 }
 
+export interface WorkspaceRecoveryPreview {
+  readonly token: string
+  readonly workspaceId: WorkspaceId
+  readonly workspaceName: string
+  readonly expectedVersion: number
+  readonly exportedAt: IsoDateTime
+  readonly expiresAt: IsoDateTime
+  readonly changes: readonly CollectionChange[]
+}
+
+export interface WorkspaceBackupGateway {
+  exportWorkspaceBackup(workspaceId: WorkspaceId, options?: RequestOptions): Promise<string>
+  previewWorkspaceRecovery(workspaceId: WorkspaceId, content: string, options?: RequestOptions): Promise<WorkspaceRecoveryPreview>
+  restoreWorkspaceBackup(input: { readonly token: string; readonly workspaceId: WorkspaceId; readonly confirmation: string }, options?: RequestOptions): Promise<void>
+}
+
 export interface AtlasGateway
-  extends AuthorizationGateway,
+  extends WorkspaceBackupGateway, AuthorizationGateway,
     CollaborationGateway,
     IssueGateway,
     NotificationGateway,

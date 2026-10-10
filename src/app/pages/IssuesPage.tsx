@@ -10,9 +10,9 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 import { DataTable, type DataTableColumn } from '../../components/data-table/DataTable'
 import type { IssueSortField } from '../../data'
-import type { Issue, IssueId, IssuePriority, Project } from '../../domain'
+import type { Issue, IssueId, IssuePriority, Project, WorkflowStatusId } from '../../domain'
 import {
-  useBulkUpdateIssuePriority,
+  useBulkUpdateIssues,
   useIssueWorkspaceData,
   type BulkIssueUpdateResult,
 } from '../../features/issues/issue-queries'
@@ -55,11 +55,12 @@ export function IssuesPage() {
     state,
     preferences.issuePageSize,
   )
-  const bulkUpdate = useBulkUpdateIssuePriority()
+  const bulkUpdate = useBulkUpdateIssues()
   const [selectedIssues, setSelectedIssues] = useState<ReadonlyMap<IssueId, Issue>>(
     () => new Map(),
   )
   const [bulkPriority, setBulkPriority] = useState<IssuePriority>('medium')
+  const [bulkWorkflowStatusId, setBulkWorkflowStatusId] = useState<WorkflowStatusId | null>(null)
   const [bulkStatus, setBulkStatus] = useState('')
   const filterStatus = readFilterStatus(location.state)
   const focusFilterStatus = shouldFocusFilterStatus(location.state)
@@ -89,6 +90,10 @@ export function IssuesPage() {
   const statusProjects = state.projectId
     ? filterProjects.filter(({ project }) => project.id === state.projectId)
     : filterProjects
+  const selectedProjectIds = new Set([...selectedIssues.values()].map(({ projectId }) => projectId))
+  const selectedProjectId = selectedProjectIds.size === 1 ? [...selectedProjectIds][0] : null
+  const bulkWorkflow = filterProjects.find(({ project }) => project.id === selectedProjectId)?.statuses ?? []
+  const bulkWorkflowStatus = bulkWorkflow.find(({ id }) => id === bulkWorkflowStatusId) ?? bulkWorkflow[0]
 
   useEffect(() => {
     pendingState.current = state
@@ -378,13 +383,47 @@ export function IssuesPage() {
             disabled={bulkUpdate.isPending}
             onClick={() => {
               bulkUpdate.mutate(
-                { issues: [...selectedIssues.values()], priority: bulkPriority },
+                { issues: [...selectedIssues.values()], changes: { priority: bulkPriority } },
                 { onSuccess: handleBulkResult },
               )
             }}
           >
             {bulkUpdate.isPending ? 'Updating…' : 'Apply priority'}
           </button>
+          {bulkWorkflowStatus ? (
+            <>
+              <label className="issue-filter">
+                <span>Set status</span>
+                <select
+                  value={bulkWorkflowStatus.id}
+                  disabled={bulkUpdate.isPending}
+                  onChange={(event) => {
+                    const status = bulkWorkflow.find(({ id }) => id === event.currentTarget.value)
+                    if (status) setBulkWorkflowStatusId(status.id)
+                  }}
+                >
+                  {bulkWorkflow.map((status) => (
+                    <option key={status.id} value={status.id}>{status.name}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={bulkUpdate.isPending}
+                onClick={() => {
+                  bulkUpdate.mutate(
+                    { issues: [...selectedIssues.values()], changes: { statusId: bulkWorkflowStatus.id } },
+                    { onSuccess: handleBulkResult },
+                  )
+                }}
+              >
+                {bulkUpdate.isPending ? 'Updating…' : 'Apply status'}
+              </button>
+            </>
+          ) : (
+            <p>Select issues from one project to change their workflow status together.</p>
+          )}
           <button
             className="secondary-button"
             type="button"

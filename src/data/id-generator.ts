@@ -40,6 +40,12 @@ import {
 const idSegmentPattern = /^[a-z0-9]+(?:_[a-z0-9]+)*$/
 
 export class DeterministicIdGenerator {
+  private readonly reserved = new Set<string>()
+
+  reserve(ids: Iterable<string>): void {
+    for (const id of ids) this.reserved.add(id)
+  }
+
   private readonly namespace: string
   private readonly counters = new Map<string, number>()
 
@@ -129,9 +135,14 @@ export class DeterministicIdGenerator {
     }
 
     const counterKey = `${prefix}:${scope}`
-    const sequence = (this.counters.get(counterKey) ?? 0) + 1
+    let sequence = this.counters.get(counterKey) ?? 0
+    let id: string
+    do {
+      sequence += 1
+      id = `${prefix}_${this.namespace}_${scope}_${sequence.toString().padStart(3, '0')}`
+    } while (this.reserved.has(id))
     this.counters.set(counterKey, sequence)
-
-    return `${prefix}_${this.namespace}_${scope}_${sequence.toString().padStart(3, '0')}`
+    this.reserved.add(id)
+    return id
   }
 }

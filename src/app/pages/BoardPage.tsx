@@ -206,7 +206,8 @@ export function BoardPage() {
       <p className="board-instructions" id="board-move-instructions">
         Drag an issue by its handle, or use its status menu as a keyboard-accessible
         alternative. Changes save immediately and return to the previous status if
-        the request fails.
+        the request fails. Blocking issues must reach a completed stage before
+        dependent work can be completed.
       </p>
 
       {issues.isPending ? (
@@ -418,6 +419,10 @@ function parseStatusId(
 function formatMoveError(error: Error, issueTitle: string): string {
   if (hasAppErrorKind(error, 'conflict')) {
     return `${issueTitle} changed elsewhere. The latest board state has been restored.`
+  }
+
+  if (hasAppErrorKind(error, 'invalid-request')) {
+    return `${error.message} The previous status has been restored.`
   }
 
   return `${issueTitle} could not be moved. Its previous status has been restored.`

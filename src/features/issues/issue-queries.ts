@@ -8,8 +8,8 @@ import {
 import { useAppServices } from '../../app/providers/app-services-context'
 import { atlasQueryKeys } from '../../app/query/keys'
 import { toIssueQuery, type IssueWorkspaceState } from './issue-workspace-state'
-import type { CreateIssueInput, IssueGateway } from '../../data'
-import type { Issue, IssuePriority } from '../../domain'
+import type { CreateIssueInput, IssueGateway, MutableIssueFields } from '../../data'
+import type { Issue } from '../../domain'
 import type { IssuePageSize } from '../../preferences/types'
 import { cancelIssueDerivedReads, reconcileIssueCaches } from '../../app/query/issue-cache'
 
@@ -81,19 +81,21 @@ export interface BulkIssueUpdateFailure {
   readonly message: string
 }
 
-export function useBulkUpdateIssuePriority() {
+type BulkIssueChanges = Partial<Pick<MutableIssueFields, 'priority' | 'statusId'>>
+
+export function useBulkUpdateIssues() {
   const { gateway, workspaceId } = useAppServices()
   const queryClient = useQueryClient()
 
   return useMutation({
-    scope: { id: `bulk-issue-priority:${workspaceId}` },
+    scope: { id: `bulk-issue:${workspaceId}` },
     mutationFn: ({
       issues,
-      priority,
+      changes,
     }: {
       issues: readonly Issue[]
-      priority: IssuePriority
-    }) => updateIssuePriorities(gateway, issues, priority),
+      changes: BulkIssueChanges
+    }) => updateIssues(gateway, issues, changes),
     onMutate: async () => {
       await cancelIssueDerivedReads(queryClient, workspaceId)
     },
@@ -121,10 +123,10 @@ export function useBulkUpdateIssuePriority() {
   })
 }
 
-export async function updateIssuePriorities(
+export async function updateIssues(
   gateway: Pick<IssueGateway, 'getIssue' | 'updateIssue'>,
   issues: readonly Issue[],
-  priority: IssuePriority,
+  changes: BulkIssueChanges,
 ): Promise<BulkIssueUpdateResult> {
   const outcomes = await Promise.all(
     issues.map(async (issue) => {
@@ -132,7 +134,7 @@ export async function updateIssuePriorities(
         const updated = await gateway.updateIssue({
           id: issue.id,
           expectedRevision: issue.revision,
-          changes: { priority },
+          changes,
         })
         return { status: 'updated' as const, issue: updated }
       } catch (error) {

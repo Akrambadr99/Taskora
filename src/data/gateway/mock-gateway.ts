@@ -1,5 +1,12 @@
+import { StorageConflictError } from '../workspace-storage'
+import { exportWorkspace, parseWorkspaceArchive, mergeWorkspace, describeChanges, rebaseRevisions } from '../workspace-backup'
+import type { IssueRelation } from '../../domain'
 import type {
   AtlasGateway,
+  WorkspaceRecoveryPreview,
+  IssueRelationshipData,
+  CreateIssueRelationInput,
+  RemoveIssueRelationInput,
   AddProjectMemberInput,
   ArchiveProjectInput,
   AuthorizationSession,
@@ -81,6 +88,7 @@ import { SystemClock, type Clock } from '../clock'
 import { DeterministicIdGenerator } from '../id-generator'
 import type { AtlasDataSnapshot } from '../snapshot'
 import { StaleSnapshotError, type InMemoryDataStore } from '../store'
+import { completedIssuesWithOpenBlockers, unresolvedBlockers } from '../workflow-transitions'
 import {
   can,
   getPermissionFingerprint,
@@ -187,6 +195,9 @@ export class MockAtlasGateway implements AtlasGateway {
   private readonly simulator: RequestSimulator
   private readonly tracer: RequestTracer
   private requestSequence = 0
+  private reservedVersion = -1
+  private recoveryPreview: { readonly view: WorkspaceRecoveryPreview; readonly data: AtlasDataSnapshot } | null = null
+
 
   constructor(options: MockAtlasGatewayOptions) {
     this.store = options.store
@@ -195,6 +206,88 @@ export class MockAtlasGateway implements AtlasGateway {
     this.ids = options.idGenerator ?? new DeterministicIdGenerator('gateway')
     this.simulator = options.simulator ?? new SimulatedNetwork()
     this.tracer = options.tracer ?? noopRequestTracer
+    this.reserveSnapshotIds()
+  }
+
+  private reserveSnapshotIds(): void {
+    const snapshot = this.store.read()
+    if (snapshot.version === this.reservedVersion) return
+    for (const rows of Object.values<readonly { readonly id: string }[]>({ ...snapshot.data })) {
+      this.ids.reserve(rows.map((row) => row.id))
+    }
+    this.reservedVersion = snapshot.version
+  }
+
+  exportWorkspaceBackup(workspaceId: WorkspaceId, options?: RequestOptions): Promise<string> {
+    return this.execute('workspace.backup.export', options, () => {
+      this.assertPermission('members:manage', workspaceId)
+      return exportWorkspace(this.store.read(), workspaceId, this.clock.now())
+    })
+  }
+
+  previewWorkspaceRecovery(workspaceId: WorkspaceId, content: string, options?: RequestOptions): Promise<WorkspaceRecoveryPreview> {
+    return this.execute('workspace.backup.preview', options, (requestId) => {
+      this.recoveryPreview = null
+      this.assertPermission('members:manage', workspaceId)
+      const archive = parseWorkspaceArchive(content)
+      if (archive.workspaceId !== workspaceId) throw new InvalidGatewayRequestError('This backup belongs to another workspace.')
+      const current = this.store.read()
+      const workspace = current.data.workspaces.find((row) => row.id === workspaceId)
+      if (!workspace) throw new EntityNotFoundError('Workspace')
+      const data = mergeWorkspace(current.data, archive)
+      this.assertRecoveryAuthority(current.data, data, workspaceId)
+      const view: WorkspaceRecoveryPreview = {
+        token: requestId, workspaceId, workspaceName: workspace.name, expectedVersion: current.version,
+        exportedAt: archive.exportedAt,
+        expiresAt: isoDateTime(new Date(new Date(this.clock.now()).valueOf() + 10 * 60_000).toISOString()),
+        changes: describeChanges(current.data, data),
+      }
+      this.recoveryPreview = { view, data }
+      return structuredClone(view)
+    })
+  }
+
+  restoreWorkspaceBackup(input: { readonly token: string; readonly workspaceId: WorkspaceId; readonly confirmation: string }, options?: RequestOptions): Promise<void> {
+    return this.execute('workspace.backup.restore', options, (requestId) => {
+      this.assertPermission('members:manage', input.workspaceId)
+      const preview = this.recoveryPreview
+      if (preview?.view.token !== input.token || preview.view.workspaceId !== input.workspaceId) {
+        throw new GatewayConflictError('Recovery preview is no longer available. Preview the backup again.')
+      }
+      if (input.confirmation !== preview.view.workspaceName) throw new InvalidGatewayRequestError('Type the current workspace name to confirm replacement.')
+      const current = this.store.read()
+      if (current.version !== preview.view.expectedVersion || this.clock.now() >= preview.view.expiresAt) {
+        this.recoveryPreview = null
+        throw new GatewayConflictError('Workspace changed or the preview expired. Preview the backup again.')
+      }
+      this.assertRecoveryAuthority(current.data, preview.data, input.workspaceId)
+      const data = rebaseRevisions(current.data, preview.data, input.workspaceId)
+      this.ids.reserve(data.auditEvents.map((event) => event.id))
+      const audit: AuditEvent = { id: this.ids.audit('recovery'), workspaceId: input.workspaceId,
+        actorId: this.actorId, requestId, action: 'workspace.recovered', outcome: 'succeeded',
+        occurredAt: this.clock.now(), metadata: { previousVersion: current.version, exportedAt: preview.view.exportedAt },
+      }
+      this.store.restore(current.version, { ...data, auditEvents: [...data.auditEvents, audit] })
+      this.recoveryPreview = null
+      this.reserveSnapshotIds()
+    })
+  }
+
+  private assertRecoveryAuthority(current: AtlasDataSnapshot, next: AtlasDataSnapshot, workspaceId: WorkspaceId): void {
+    const actor = current.memberships.find((row) => row.workspaceId === workspaceId && row.userId === this.actorId)
+    const restored = next.memberships.find((row) => row.workspaceId === workspaceId && row.userId === this.actorId)
+    if (!actor || restored?.status !== 'active' || restored.role !== actor.role) {
+      throw new ForbiddenGatewayError('Recovery must preserve your active workspace role.')
+    }
+    if (!next.memberships.some((row) => row.workspaceId === workspaceId && row.role === 'owner' && row.status === 'active')) {
+      throw new InvalidGatewayRequestError('Recovery requires an active workspace owner.')
+    }
+    if (actor.role !== 'owner') {
+      const owners = (data: AtlasDataSnapshot) => data.memberships
+        .filter((row) => row.workspaceId === workspaceId && row.role === 'owner')
+        .map((row) => `${row.id}:${row.userId}:${row.status}`).sort().join('|')
+      if (owners(current) !== owners(next)) throw new ForbiddenGatewayError('Only an owner may change owner memberships during recovery.')
+    }
   }
 
   getWorkspaceActivity(
@@ -1055,6 +1148,14 @@ export class MockAtlasGateway implements AtlasGateway {
         if (!statusId) throw new GatewayConflictError('Issue migration target is unavailable.')
         return { ...issue, statusId, revision: issue.revision + 1, updatedAt: occurredAt }
       })
+      if (completedIssuesWithOpenBlockers(issues, current.data.issueRelations, [
+        ...current.data.workflowStatuses.filter(({ projectId }) => projectId !== project.id),
+        ...normalized,
+      ]).length > 0) {
+        throw new InvalidGatewayRequestError(
+          'The workflow change would leave a completed issue with an unfinished blocker.',
+        )
+      }
       const statusNames = new Map(normalized.map(({ id, name }) => [id, name]))
       const projectNotifications = this.buildProjectUpdateNotifications(
         current.data,
@@ -2415,6 +2516,110 @@ export class MockAtlasGateway implements AtlasGateway {
     })
   }
 
+  getIssueRelationships(id: IssueId, options?: RequestOptions): Promise<IssueRelationshipData> {
+    return this.execute('issue.relationships.get', options, () => {
+      const data = this.store.read().data
+      const issue = data.issues.find((candidate) => candidate.id === id)
+      if (!issue) throw new EntityNotFoundError('Issue')
+      this.assertPermission('issue:view', issue.workspaceId, issue.projectId)
+      return {
+        issue,
+        projectIssues: data.issues.filter(({ projectId }) => projectId === issue.projectId),
+        relations: data.issueRelations.filter(({ sourceIssueId, targetIssueId }) =>
+          sourceIssueId === id || targetIssueId === id),
+      }
+    })
+  }
+
+  createIssueRelation(input: CreateIssueRelationInput, options?: RequestOptions): Promise<IssueRelation> {
+    return this.execute('issue.relation.create', options, (requestId) => {
+      if (!['blocks', 'relates-to', 'duplicates'].includes(input.type)) {
+        throw new InvalidGatewayRequestError('Unknown issue relationship type.')
+      }
+      const data = this.store.read().data
+      const duplicate = data.issueRelations.some((relation) => relation.type === input.type && (
+        (relation.sourceIssueId === input.sourceIssueId && relation.targetIssueId === input.targetIssueId) ||
+        (input.type === 'relates-to' && relation.sourceIssueId === input.targetIssueId && relation.targetIssueId === input.sourceIssueId)
+      ))
+      if (duplicate) throw new InvalidGatewayRequestError('That issue relationship already exists.')
+      let id = this.ids.issueRelation('relationship')
+      while (data.issueRelations.some((relation) => relation.id === id)) {
+        id = this.ids.issueRelation('relationship')
+      }
+      const relation: IssueRelation = {
+        id, sourceIssueId: input.sourceIssueId, targetIssueId: input.targetIssueId, type: input.type,
+      }
+      this.changeIssueRelation(relation, input, false, requestId)
+      return relation
+    })
+  }
+
+  removeIssueRelation(input: RemoveIssueRelationInput, options?: RequestOptions): Promise<void> {
+    return this.execute('issue.relation.remove', options, (requestId) => {
+      const relation = this.store.read().data.issueRelations.find(({ id }) => id === input.id)
+      if (!relation) throw new EntityNotFoundError('Issue relationship')
+      this.changeIssueRelation(relation, input, true, requestId)
+    })
+  }
+
+  private changeIssueRelation(
+    relation: IssueRelation,
+    revisions: Pick<CreateIssueRelationInput, 'expectedSourceRevision' | 'expectedTargetRevision'>,
+    remove: boolean,
+    requestId: string,
+  ): void {
+    const current = this.store.read()
+    const source = current.data.issues.find(({ id }) => id === relation.sourceIssueId)
+    const target = current.data.issues.find(({ id }) => id === relation.targetIssueId)
+    if (!source || !target) throw new EntityNotFoundError('Issue')
+    this.assertPermission('issue:update', source.workspaceId, source.projectId)
+    this.assertPermission('issue:update', target.workspaceId, target.projectId)
+    this.assertProjectOpen(current.data, source.projectId)
+    if (source.id === target.id || source.projectId !== target.projectId || source.workspaceId !== target.workspaceId) {
+      throw new InvalidGatewayRequestError('Relationships require two different issues in the same project.')
+    }
+    if (source.revision !== revisions.expectedSourceRevision || target.revision !== revisions.expectedTargetRevision) {
+      throw new GatewayConflictError('An issue changed. Refresh the relationships and try again.')
+    }
+    if (!remove && relation.type === 'blocks' &&
+      current.data.workflowStatuses.find(({ id }) => id === target.statusId)?.category === 'completed' &&
+      current.data.workflowStatuses.find(({ id }) => id === source.statusId)?.category !== 'completed') {
+      throw new InvalidGatewayRequestError(
+        'Complete the blocking issue before linking it to completed work.',
+      )
+    }
+    const occurredAt = this.clock.now()
+    const action = remove ? 'issue.relationship.removed' : 'issue.relationship.created'
+    const summary = `${remove ? 'Removed' : 'Added'} ${relation.type}: ${this.issueReference(current.data, source)} to ${this.issueReference(current.data, target)}`
+    const activity = [source, target].map((issue): ActivityEvent => {
+      let id = this.ids.activity('relationship')
+      while (current.data.activityEvents.some((event) => event.id === id)) {
+        id = this.ids.activity('relationship')
+      }
+      return { id, workspaceId: source.workspaceId, actorId: this.actorId,
+        entityKind: 'issue', entityId: issue.id, action, occurredAt, summary }
+    })
+    let auditId = this.ids.audit('relationship')
+    while (current.data.auditEvents.some((event) => event.id === auditId)) {
+      auditId = this.ids.audit('relationship')
+    }
+    this.commit(current.version, {
+      ...current.data,
+      issues: current.data.issues.map((issue) => issue.id === source.id || issue.id === target.id
+        ? { ...issue, revision: issue.revision + 1, updatedAt: occurredAt } : issue),
+      issueRelations: remove
+        ? current.data.issueRelations.filter(({ id }) => id !== relation.id)
+        : [...current.data.issueRelations, relation],
+      activityEvents: [...current.data.activityEvents, ...activity],
+      auditEvents: [...current.data.auditEvents, {
+        id: auditId, workspaceId: source.workspaceId,
+        actorId: this.actorId, requestId, action, outcome: 'succeeded', occurredAt,
+        metadata: { relationId: relation.id, sourceIssueId: source.id, targetIssueId: target.id,
+          type: relation.type, sourceRevision: source.revision + 1, targetRevision: target.revision + 1 },
+      }],
+    })
+  }
+
   createIssue(
     input: CreateIssueInput,
     options?: RequestOptions,
@@ -2525,6 +2730,35 @@ export class MockAtlasGateway implements AtlasGateway {
         throw new InvalidGatewayRequestError(
           'Issues must use a status from their project workflow.',
         )
+      }
+
+      if (nextStatusId !== issue.statusId) {
+        const prospectiveIssues = current.data.issues.map((candidate) =>
+          candidate.id === issue.id ? { ...candidate, statusId: nextStatusId } : candidate,
+        )
+        const affectedIds = new Set([
+          issue.id,
+          ...current.data.issueRelations
+            .filter((relation) => relation.type === 'blocks' && relation.sourceIssueId === issue.id)
+            .map((relation) => relation.targetIssueId),
+        ])
+        const blocked = completedIssuesWithOpenBlockers(
+          prospectiveIssues,
+          current.data.issueRelations,
+          current.data.workflowStatuses,
+        ).filter((candidate) => affectedIds.has(candidate.id))
+        const blockedIssue = blocked[0]
+        if (blockedIssue) {
+          const blocker = unresolvedBlockers(
+            blockedIssue.id,
+            prospectiveIssues,
+            current.data.issueRelations,
+            current.data.workflowStatuses,
+          )[0]
+          throw new InvalidGatewayRequestError(
+            `Complete ${blocker ? this.issueReference(current.data, blocker) : 'the blocking issue'} before moving dependent work to a completed stage.`,
+          )
+        }
       }
 
       const occurredAt = this.clock.now()
@@ -2745,6 +2979,7 @@ export class MockAtlasGateway implements AtlasGateway {
     perform: (requestId: string) => T,
   ): Promise<T> {
     const requestId = this.nextRequestId()
+    const recoveryEpoch = this.store.recoveryEpoch
     this.trace(requestId, operation, 'started')
 
     try {
@@ -2754,7 +2989,14 @@ export class MockAtlasGateway implements AtlasGateway {
         throw new RequestCancelledError()
       }
 
-      const result = perform(requestId)
+      const result = await this.store.exclusive(() => {
+        if (options?.signal?.aborted === true) throw new RequestCancelledError()
+        if (recoveryEpoch !== this.store.recoveryEpoch) {
+          throw new GatewayConflictError('Workspace was recovered while this request was pending. Refresh and try again.')
+        }
+        this.reserveSnapshotIds()
+        return perform(requestId)
+      })
       this.trace(requestId, operation, 'succeeded')
       return result
     } catch (error) {
@@ -3062,7 +3304,7 @@ export class MockAtlasGateway implements AtlasGateway {
     try {
       this.store.commit(version, data)
     } catch (error) {
-      if (error instanceof StaleSnapshotError) {
+      if (error instanceof StaleSnapshotError || error instanceof StorageConflictError) {
         throw new GatewayConflictError(
           'Another request committed data first. Refresh and try again.',
         )
@@ -3073,6 +3315,7 @@ export class MockAtlasGateway implements AtlasGateway {
   }
 
   private toGatewayError(error: unknown): GatewayError {
+    if (error instanceof StorageConflictError || error instanceof StaleSnapshotError) return new GatewayConflictError(error.message)
     if (error instanceof GatewayError) {
       return error
     }

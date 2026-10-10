@@ -1432,3 +1432,9 @@
     padding: var(--space-8) var(--space-6);
   }
 }
+
+.backup-panel { margin-top: var(--space-6); }
+.backup-preview-scroll { max-height: 35vh; overflow: auto; }
+.backup-preview-scroll table { width: 100%; border-collapse: collapse; }
+.backup-preview-scroll th, .backup-preview-scroll td { padding: var(--space-2); text-align: left; }
+.backup-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }

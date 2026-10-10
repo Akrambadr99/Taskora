@@ -7,3 +7,7 @@
 *.png binary
 *.webp binary
 *.woff2 binary
+
+# Preserve upstream license bytes and original formatting.
+docs/third-party/licenses/*.txt -text whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
+docs/third-party/create-vite-9.1.2-LICENSE.txt -text whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
