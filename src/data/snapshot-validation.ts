@@ -1,6 +1,7 @@
 import type { AtlasDataSnapshot } from './snapshot'
 import {
   assertIssueRelations,
+  assertIssueHierarchy,
   assertProjectKey,
   assertProjectWorkflow,
   assertUniqueMemberships,
@@ -22,6 +23,7 @@ export function assertValidSnapshot(snapshot: AtlasDataSnapshot): void {
   }
 
   assertUniqueMemberships(snapshot.memberships)
+  assertIssueHierarchy(snapshot.issues)
 
   const workspaces = new Set(snapshot.workspaces.map(({ id }) => id))
   const users = new Set(snapshot.users.map(({ id }) => id))

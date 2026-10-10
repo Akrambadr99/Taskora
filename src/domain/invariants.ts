@@ -17,6 +17,7 @@ export type DomainInvariantCode =
   | 'invalid-workflow'
   | 'invalid-issue-relation'
   | 'cyclic-issue-dependency'
+  | 'invalid-issue-parent'
 
 export class DomainInvariantError extends Error {
   readonly code: DomainInvariantCode
@@ -160,33 +161,43 @@ export function assertIssueRelations(
   assertAcyclicGraph(blockingGraph)
 }
 
-function assertAcyclicGraph(graph: ReadonlyMap<IssueId, readonly IssueId[]>): void {
-  const visiting = new Set<IssueId>()
-  const visited = new Set<IssueId>()
-
-  const visit = (issueId: IssueId): void => {
-    if (visiting.has(issueId)) {
+export function assertIssueHierarchy(issues: readonly Issue[]): void {
+  const byId = new Map(issues.map((issue) => [issue.id, issue]))
+  const children = new Map<IssueId, IssueId[]>(issues.map(({ id }) => [id, []]))
+  for (const issue of issues) {
+    if (issue.parentIssueId === null) continue
+    const parent = byId.get(issue.parentIssueId)
+    if (!parent || parent.id === issue.id || parent.projectId !== issue.projectId ||
+        parent.workspaceId !== issue.workspaceId) {
       throw new DomainInvariantError(
-        'cyclic-issue-dependency',
-        'Blocking issue relations must form an acyclic graph.',
+        'invalid-issue-parent',
+        'An issue parent must be a different existing issue in the same project and workspace.',
       )
     }
-
-    if (visited.has(issueId)) {
-      return
-    }
-
-    visiting.add(issueId)
-
-    for (const blockedIssueId of graph.get(issueId) ?? []) {
-      visit(blockedIssueId)
-    }
-
-    visiting.delete(issueId)
-    visited.add(issueId)
+    children.get(parent.id)?.push(issue.id)
   }
+  assertAcyclicGraph(children, 'invalid-issue-parent', 'Issue parent hierarchies must be acyclic.')
+}
 
-  for (const issueId of graph.keys()) {
-    visit(issueId)
+function assertAcyclicGraph(
+  graph: ReadonlyMap<IssueId, readonly IssueId[]>,
+  code: DomainInvariantCode = 'cyclic-issue-dependency',
+  message = 'Blocking issue relations must form an acyclic graph.',
+): void {
+  // An iterative topological walk also supports deep imported project graphs.
+  const incoming = new Map<IssueId, number>([...graph.keys()].map((id) => [id, 0]))
+  for (const targets of graph.values()) {
+    for (const target of targets) incoming.set(target, (incoming.get(target) ?? 0) + 1)
   }
+  const ready = [...incoming].filter(([, count]) => count === 0).map(([id]) => id)
+  let visited = 0
+  for (const id of ready) {
+    visited += 1
+    for (const target of graph.get(id) ?? []) {
+      const remaining = (incoming.get(target) ?? 0) - 1
+      incoming.set(target, remaining)
+      if (remaining === 0) ready.push(target)
+    }
+  }
+  if (visited !== graph.size) throw new DomainInvariantError(code, message)
 }
