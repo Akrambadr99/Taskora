@@ -9,6 +9,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { ModalDialog } from '../../components/dialog/ModalDialog'
 import { GatewayConflictError } from '../../data'
+import { IssueRelationshipsPanel } from '../../features/issues/IssueRelationshipsPanel'
 import { CommentItem } from '../../features/comments/CommentItem'
 import {
   issueId,
@@ -170,6 +171,8 @@ function LoadedIssue({ requestedIssueId }: Readonly<{ requestedIssueId: IssueId 
           <dd>{issue.data.dueDate ?? 'Not scheduled'}</dd>
         </div>
       </dl>
+
+      <IssueRelationshipsPanel key={issue.data.id} issueId={issue.data.id} canEdit={canEdit} />
 
       <IssueWatchPanel
         issue={issue.data}
