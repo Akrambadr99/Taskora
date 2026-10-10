@@ -9,7 +9,7 @@ function sameProjectIssues() {
   const first = seed.issues[0]
   if (!first) throw new Error('Expected a fixture issue.')
   const second = seed.issues.find((issue) => issue.id !== first.id && issue.projectId === first.projectId)
-  if (!first || !second) throw new Error('Expected two issues in one project.')
+  if (!second) throw new Error('Expected two issues in one project.')
   return { seed, first, second }
 }
 
