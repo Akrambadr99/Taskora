@@ -8,3 +8,4 @@ export * from './snapshot-validation'
 export * from './store'
 
 export { backupByteLimit } from './workspace-backup'
+export * from './workspace-storage'

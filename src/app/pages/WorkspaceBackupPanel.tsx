@@ -79,7 +79,7 @@ export function WorkspaceBackupPanel() {
   return <section className="settings-panel backup-panel" aria-labelledby={headingId}>
     <h2 id={headingId}>Workspace backup and recovery</h2>
     <p>Download workspace data and history as a versioned JSON file. Keep backups private: they contain member details and comments. Device preferences are separate.</p>
-    <p>Recovery replaces workspace content. Existing user profiles and audit records are retained. Until browser persistence is enabled, workspace data resets on reload.</p>
+    <p>Recovery replaces workspace content. Existing user profiles and audit records are retained. Workspace changes are saved in this browser across reloads. Export backups for protection against browser data loss.</p>
     {authorization.can('members:manage') ? <>
       <button className="secondary-button" type="button" disabled={busy} onClick={download}>Download workspace backup</button>
       <label className="settings-field"><span>Workspace backup file</span>
