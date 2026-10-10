@@ -77,11 +77,13 @@ versions, and validates a proposed snapshot before replacing current data.
 [Snapshot validation](src/data/snapshot-validation.ts) includes unique
 project/user memberships and membership in the project's workspace.
 
-Application data, including issues, memberships and activity records, lives in
-memory and is recreated from fixtures on a full page reload. The browser entry
-uses [BrowserPreferenceStorage](src/preferences/storage.ts) with `localStorage`
-for preferences. This is not durable storage for the project/issue database.
-The service factory also supports an in-memory preference adapter for tests.
+Application data is saved across reloads in a versioned browser snapshot. Web Locks
+serialize transactions across tabs; failed saves do not publish partial changes.
+Settings provides workspace backup download, validated import preview and explicit
+recovery confirmation. Corrupt or unsupported saved data is preserved for recovery.
+Personal preferences remain in their separate browser storage adapter. Tests can
+still use the in-memory store. See [recovery and persistence](TASKORA_RECOVERY_AND_PERSISTENCE.md)
+for formats, browser requirements, storage limits and reset behavior.
 
 Domain and gateway authorization checks model role and membership behavior.
 They do not secure data against someone controlling the browser. A real
@@ -213,7 +215,7 @@ Parent hierarchies are validated on every snapshot commit, and iterative graph
 validation handles long dependency chains without recursive stack overflow.
 Links are advisory; they do not prevent completing a blocked issue.
 
-The final local increment passed 380 Vitest tests, 25 Chromium journeys, lint,
+The original relationship increment passed 380 Vitest tests, 25 Chromium journeys, lint,
 types, production build and npm audit (zero reported vulnerabilities). Line
 coverage was 92.26%. The previous dated remediation results above remain a
 historical baseline. These additions are AI-generated and are disclosed in the
@@ -226,12 +228,16 @@ See the [engineering roadmap](TASKORA_40K_ENGINEERING_ROADMAP.md),
 [full verification](TASKORA_FULL_VERIFICATION_RESULTS.md),
 [source count](TASKORA_FINAL_SOURCE_LOC.md) and
 [release readiness](TASKORA_RELEASE_READINESS.md).
-The inclusive first-party candidate count is 32,191; the 40K milestone remains open.
+The recovery/persistence/integrity increment passes 431 Vitest tests, 31 Chromium
+journeys, lint, types, coverage thresholds, production build and npm audit with
+zero reported vulnerabilities. Line coverage is 92.13%. The inclusive first-party
+candidate count is **33,704**; the 40K planning target remains open.
 
 ## Limitations and maintenance
 
-- Authoritative application data has no durable persistence, backup/recovery
-  service or transactional workspace import/export workflow.
+- Browser storage is bounded, can be cleared by the browser/user, and is not a
+  server database. Export backups independently. Web Locks support is required;
+  local snapshots are not encrypted and checksums are not authentication.
 - Requests simulate asynchronous transport. The repository does not implement
   a remote API server, production authentication, email delivery or a shared
   multi-user database.
@@ -243,7 +249,7 @@ The inclusive first-party candidate count is 32,191; the 40K milestone remains o
 - Review dependency advisories and update the version-specific third-party
   inventory/notices when dependencies change.
 - Preserve gateway contracts, snapshot validation, cancellation and conflict
-  behavior when replacing the mock transport or adding persistence. Give new
+  behavior when replacing the mock transport or extending persistence. Give new
   user-facing capabilities acceptance tests instead of adding code for size alone.
 
 ## Creator & Maintainer

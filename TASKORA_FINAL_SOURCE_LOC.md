@@ -1,31 +1,33 @@
-# Taskora final source LOC
+# Taskora source LOC
 
-Counter: cloc 2.10, code lines only, `--by-file --skip-uniqueness`. Counts are from committed snapshots, not accumulated historical additions. Blank lines, comments, Markdown, notices, JSON/lockfiles, dependencies, bundles, coverage, browser artifacts and private evidence are excluded. Eleven verified create-vite scaffold lines are subtracted (five in vite.config.ts and six in index.html).
+Counter: cloc 2.10, code lines only, `--by-file --skip-uniqueness`. Sources are extracted from committed Git snapshots. The unchanged baseline scope is .ts/.tsx/.js/.mjs/.css/.html, excluding docs. Blank lines, comments, Markdown, JSON/lockfiles, dependencies, licenses, generated output, private evidence and the Python reporting tool are not counted. Eleven previously verified scaffold lines are subtracted: five in vite.config.ts and six in index.html.
 
-| Milestone | Inclusive | No tests | No CSS/HTML | Application implementation |
-| --- | ---: | ---: | ---: | ---: |
-| Prepared remediation (1550b21) | 31,460 | 21,714 | 28,421 | 18,528 |
-| Corrected hierarchy core (f7b3110) | 31,540 | 21,731 | 28,501 | 18,545 |
-| Relationship gateway (50b30b9) | 31,825 | 21,854 | 28,786 | 18,668 |
-| Integrated dependency UI (2c11d65) | 32,191 | 22,089 | 29,116 | 18,867 |
+| Milestone | Commit | Inclusive | No tests | No CSS/HTML | Application implementation |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Original verified baseline | fcd3d14 | 32,191 | 22,089 | 29,116 | 18,867 |
+| A: backup/recovery UI | 1ccbdd5 | 33,115 | 22,705 | 30,035 | 19,478 |
+| B: durable browser lifecycle | eb9656e | 33,630 | 22,970 | 30,550 | 19,743 |
+| C: live reference boundaries | b1f20bd | 33,704 | 22,983 | 30,624 | 19,756 |
 
-Final component totals (disjoint, except the application rollup):
-
-| Category | Candidate SLOC |
+| Category | Final candidate SLOC |
 | --- | ---: |
 | Domain/core | 685 |
-| Data/gateway, including deterministic fixtures | 6,735 |
-| Frontend, application services and preferences | 11,447 |
-| Application implementation rollup | 18,867 |
-| Tests and test infrastructure | 10,102 |
-| CSS/HTML after scaffold exclusion | 3,075 |
-| Build/lint tooling after scaffold exclusion | 147 |
-| Inclusive | 32,191 |
-| Excluding tests | 22,089 |
-| Excluding CSS/HTML | 29,116 |
+| Data/gateway including fixtures | 7,391 |
+| Frontend/services/preferences | 11,680 |
+| Tests and test infrastructure | 10,721 |
+| CSS/HTML | 3,080 |
+| Build/lint tooling | 147 |
+| Inclusive | 33,704 |
+| Application implementation rollup | 19,756 |
 
-The raw source total is 32,202; subtracting 11 gives 32,191. Growth from the remediation is +731 inclusive, +339 application implementation, +356 test and +36 style lines. No exact duplicate source modules were introduced; no vendored/license text contributes to source totals.
+Raw code: 33,715; scaffold exclusion: 11. Net increase from baseline: 1,513 inclusive lines, including 889 application implementation, 619 tests and 5 styles. This is a net source delta, not a human-authorship measurement. The 40K gap is 6,296 lines; no filler was added to close it.
 
-Reproduction: `python C:/Users/Lenovo/Documents/Taskora_engineering_evidence_20261010/count_source.py <commit>` archives that commit into a new isolated evidence directory, enumerates source extensions and runs cloc. The script records its cloc command, category, scaffold exclusion and SHA-256 for every counted file in loc-<commit>.json. It does not execute application source or modify Git. Git's committed snapshots use canonical line endings; text hashes may differ from a CRLF worktree without changing counts.
+Reproduce with Python 3.9+ and cloc 2.10:
 
-40K has not been achieved. This report measures candidate first-party source, not original human contribution, license ownership, or rustLabs' private counting policy.
+```sh
+python scripts/count-source.py HEAD --cloc cloc --output /path/outside/repo/source-loc.json
+```
+
+For a Perl cloc script, pass `--cloc /absolute/path/cloc.pl --perl /path/to/perl`. The ledger records the exact revision, command, category, scaffold exclusions and SHA-256 for every counted file. The portable counter was executed on both the original fcd3d14 baseline (32,191) and the final source implementation (33,704). Subsequent Python/documentation-only commits do not affect this counting scope.
+
+These are candidate first-party source counts; they do not establish exclusive human authorship, ownership rights or rustLabs acceptance.

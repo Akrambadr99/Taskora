@@ -1,6 +1,6 @@
 # Taskora implementation changelog
 
-Base: `02ef05c956f691d1ee15ed6f5c7b4091bf071a34`. All commits are local, current-dated and disclose AI assistance. No history rewrite.
+Base: `02ef05c956f691d1ee15ed6f5c7b4091bf071a34`. The initial ten commits were published to owner-approved draft PR #1. The recovery/persistence continuation below is local only. New commits retain real development dates and AI-assistance disclosure; no history rewrite.
 
 ## 7edefb213e802d6e7d4ed603393208bdb56ff80a
 
@@ -311,3 +311,107 @@ The initial five commits preserve the reviewed remediation tree. That combined t
 The gateway increment passed 79 targeted tests, types and lint. The UI increment passed 24 targeted rendered tests and final full checks: 380 coverage tests, 25 Chromium journeys, lint, types, build, audit. No failing source is knowingly left in the final tree. See TASKORA_DOMAIN_AND_DATA_TEST_REPORT.md for failed attempts and fixes.
 
 The subsequent documentation commit contains the eight TASKORA_*.md reports and README links. Its final hash and complete file list are recorded in the external final-commit-manifest.md to avoid a self-referential commit hash. Private reports, credentials, raw logs and submission packages are not included.
+
+## Recovery, persistence and integrity continuation
+
+Baseline: `fcd3d1451c53a843fe798b06d9c115a0278145c5` (80 commits).
+
+### 3852cd4bc7470ece17096f9497b768f0cc38abb7
+
+feat: validate untrusted workspace snapshot fields
+
+Validate all domain fields, identifiers, enums and dates before structural integrity checks; reject orphan workflow states. Verification: TypeScript, targeted ESLint and 31 schema/store/membership tests passed. Initial typing/lint errors and an invalid test expectation were corrected before commit. AI-Assistance: OpenAI Codex generated implementation and tests.
+
+Files:
+
+- `src/data/snapshot-schema.test.ts`
+- `src/data/snapshot-schema.ts`
+- `src/data/snapshot-validation.ts`
+
+### fc5324e4e647b9dbddc8da1c805e6eb5f52bdfec
+
+feat: preview and atomically restore versioned workspace backups
+
+Add bounded schema-v1 archives, scoped preview and replacement, current authority and owner checks, explicit confirmation, expiry, revision rebasing, pending-request invalidation, audit retention and collision-safe IDs. Verification: TypeScript, targeted ESLint and 111 gateway/store/ID tests passed after correcting test typings and lint findings. AI-Assistance: OpenAI Codex generated implementation and tests.
+
+Files:
+
+- `src/data/gateway/contracts.ts`
+- `src/data/gateway/mock-gateway.ts`
+- `src/data/gateway/tracing.ts`
+- `src/data/gateway/workspace-recovery.test.ts`
+- `src/data/id-generator.ts`
+- `src/data/store.ts`
+- `src/data/workspace-backup.ts`
+
+### 1ccbdd519754711f9eabbc9237e07e8c7aa6f0c2
+
+feat: review and confirm workspace recovery in settings
+
+Add private JSON downloads, bounded file import, accessible preview and typed confirmation, cancellation, failure recovery and cache refresh. Fix a browser-discovered focus restoration bug before commit. Verification: full ESLint, TypeScript, 412 Vitest tests, coverage (92.34% lines), production build, 27 Chromium tests and zero-vulnerability npm audit passed. Initial failing E2E evidence is retained. AI-Assistance: OpenAI Codex generated UI and tests.
+
+Files:
+
+- `e2e/workspace-recovery.spec.ts`
+- `src/app/pages/SettingsPage.tsx`
+- `src/app/pages/WorkspaceBackupPanel.test.tsx`
+- `src/app/pages/WorkspaceBackupPanel.tsx`
+- `src/app/pages/pages.css`
+- `src/data/index.ts`
+
+### 77775a63b74f1d72497bdbfea57437bd2dc29a05
+
+feat: persist workspace transactions with cross-tab locking
+
+Add strict versioned storage decoding, v1 migration, corruption checksum, raw-value conflict detection, exclusive gateway transactions and save-before-publish rollback for quota failures. Retain recovery epochs across restarts and refresh generated-ID reservations after external writes. Verification: TypeScript, targeted ESLint and 100 persistence/store/gateway tests passed. Parameter-property and test typing/lint findings were fixed before commit. AI-Assistance: OpenAI Codex generated implementation and tests.
+
+Files:
+
+- `src/data/gateway/mock-gateway.ts`
+- `src/data/gateway/workspace-recovery.test.ts`
+- `src/data/store.ts`
+- `src/data/workspace-storage.test.ts`
+- `src/data/workspace-storage.ts`
+
+### eb9656e8ce219d2cf16dacc754a7c90df0a4edaa
+
+feat: restore durable workspaces across browser lifecycles
+
+Load browser state on startup, preserve the configured actor, synchronize other-tab writes and resumed pages, and offer explicit corruption download/retry/reset recovery. Include real persistent Chromium restart, two-tab, migration and reset journeys. Verification: full ESLint, TypeScript, Vitest, coverage thresholds, production build, 31 Chromium tests and npm audit passed. AI-Assistance: OpenAI Codex generated implementation and tests.
+
+Files:
+
+- `e2e/workspace-persistence.spec.ts`
+- `src/App.test.tsx`
+- `src/App.tsx`
+- `src/app/browser-workspace.test.ts`
+- `src/app/browser-workspace.ts`
+- `src/app/pages/StorageRecoveryPage.test.tsx`
+- `src/app/pages/StorageRecoveryPage.tsx`
+- `src/app/pages/WorkspaceBackupPanel.tsx`
+- `src/app/providers/WorkspaceSynchronization.tsx`
+- `src/data/index.ts`
+
+### b1f20bdf229d9383d20ce420ee00ccf43376734b
+
+fix: enforce live workspace reference boundaries
+
+Reject nonmember assignees, notification recipients and preference owners, duplicate issue labels and cross-workspace live activity targets. Preserve valid historical deleted-entity events and suspended-member assignments. Verify startup does not switch the configured actor after demotion. Verification: TypeScript, targeted ESLint and 36 integrity/store/recovery/lifecycle tests passed. AI-Assistance: OpenAI Codex generated implementation and tests.
+
+Files:
+
+- `src/app/browser-workspace.test.ts`
+- `src/data/snapshot-validation.ts`
+- `src/data/workspace-reference-integrity.test.ts`
+
+### c38f030dda73a3f01ac7ca88d0387be393203648
+
+chore: make committed source measurements reproducible
+
+Add a portable cloc wrapper with committed-tree extraction, scoped source classification, scaffold exclusions and per-file hashes. Verification: Python AST parse and real cloc 2.10 runs reproduce 32,191 baseline and 33,704 current SLOC. The Python reporting tool is excluded by the unchanged TS/JS/CSS/HTML counting policy. AI-Assistance: OpenAI Codex generated the measurement tool.
+
+Files:
+
+- `scripts/count-source.py`
+
+The final documentation commit updates these reports and README. The external commit-manifest.json includes its full SHA after creation, avoiding a self-referential commit hash in this file.

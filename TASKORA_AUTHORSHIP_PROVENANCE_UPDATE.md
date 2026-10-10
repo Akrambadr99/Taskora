@@ -17,4 +17,10 @@ The new feature grows inclusive first-party candidate SLOC from 31,460 to 32,191
 
 Every new commit has an AI-Assistance body. Commit history reflects actual local work and corrections; dates were not backdated and existing history was not rewritten. There are no fabricated contributors or claims that a human directly typed assistant-generated code. The original identity in older commits remains unchanged.
 
-The file-level commit inventory is in TASKORA_IMPLEMENTATION_CHANGELOG.md. Git diff for each listed commit is the source-range record of this pass. Reaching a numerical SLOC threshold does not establish the rustLabs mainly-human-written requirement. No submission, license acceptance, GitHub push or visibility change occurred in this work.
+The file-level commit inventory is in TASKORA_IMPLEMENTATION_CHANGELOG.md. Git diff for each listed commit is the source-range record of this pass. Reaching a numerical SLOC threshold does not establish the rustLabs mainly-human-written requirement. The original ten commits were later published with owner approval to draft PR #1. This subsequent recovery/persistence continuation made no push, PR update, merge, visibility change or rustLabs submission.
+
+## Recovery/persistence continuation
+
+The owner states that they personally wrote implementation in early Taskora development; that declaration is preserved. OpenAI Codex generated the new runtime schemas, recovery contract/gateway/UI, persistence and synchronization implementation, integrity refinements, tests, measurement tool and documentation in this continuation. The authorized Git author identity does not mean the owner personally typed these additions.
+
+The original 80-commit history and hashes were retained. Worktree-specific identity configuration uses the authorized name/email above; no global identity or original author records were changed. Every new commit includes an AI-Assistance disclosure. Current measured source grows from 32,191 to 33,704 (+1,513 net). This is neither an exact human/AI percentage nor a claim of predominantly human-written code.

@@ -2,9 +2,9 @@
 
 ## Preserved boundaries
 
-React routing and pages live in `src/app`; feature modules own interactions and TanStack Query orchestration. `src/domain` holds identifiers, entity contracts and policy. `src/data` owns fixtures, immutable snapshots, the versioned store and the asynchronous gateway. ESLint enforces import boundaries. All authoritative application data remains in memory. Preferences alone use a browser storage adapter.
+React routing and pages live in `src/app`; feature modules own interactions and TanStack Query orchestration. `src/domain` holds identifiers, entity contracts and policy. `src/data` owns fixtures, immutable snapshots, the versioned store and the asynchronous gateway. ESLint enforces import boundaries. The browser entry now uses a versioned localStorage adapter and Web Locks around the same snapshot store; tests may still use in-memory stores. Preferences remain separate.
 
-A mutation waits for the simulator, rechecks current permissions, reads the current store, validates the request and commits one complete snapshot. `InMemoryDataStore` validates and clones/freezes the proposed snapshot before replacement. Its monotonic version prevents stale snapshot commits. Issue revisions protect user drafts. Gateway errors are typed and cancellation is checked before mutation.
+A mutation waits for the simulator, enters the store transaction, synchronizes persisted data, rechecks current permissions, validates the request and commits one complete snapshot. `InMemoryDataStore` validates and clones/freezes the proposed snapshot before replacement. Its monotonic version prevents stale snapshot commits. Issue revisions protect user drafts. Gateway errors are typed and cancellation is checked before mutation.
 
 ## Domain inventory
 
@@ -32,4 +32,4 @@ Relationship query keys are beneath the workspace issue namespace. Mutations can
 
 ## Boundaries
 
-No server authentication, durable database, email delivery or remote collaboration service was added. Local permissions model intended behavior; a browser owner can inspect or alter browser state. Dependencies are advisory: this increment does not prevent completing a blocked issue. Cross-project links, persistent recovery and transition guard policies are not implemented.
+No server authentication, hosted database, email delivery or remote collaboration service was added. Local permissions model intended behavior; a browser owner can inspect or alter browser state. Dependencies remain advisory; cross-project links and transition-guard policies are not implemented. Versioned workspace recovery and bounded browser persistence are now implemented. See [recovery and persistence](TASKORA_RECOVERY_AND_PERSISTENCE.md) for contracts, transaction ordering and limitations.

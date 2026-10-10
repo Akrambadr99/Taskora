@@ -1,3 +1,29 @@
+# Current verification: recovery, persistence and integrity
+
+10 October 2026, Windows, Node 20.19.5 / npm 10.8.2. Final TS/React implementation: `b1f20bdf229d9383d20ce420ee00ccf43376734b`. The subsequent counter was independently executed against the baseline and final source; documentation-only changes do not alter the tested application.
+
+| Check | Final result |
+| --- | --- |
+| ESLint | Passed |
+| TypeScript | Passed |
+| Vitest | 431 passed across 59 files |
+| Coverage rerun | 431 passed; all existing thresholds retained |
+| Production build and entry budget | Passed |
+| Playwright Chromium | 31 passed |
+| npm audit | 0 reported vulnerabilities |
+| Git diff integrity | Passed before each commit |
+| Portable cloc verification | Reproduced 32,191 baseline and 33,704 current source |
+
+Coverage: statements 89.63%, branches 81.67%, functions 90.80%, lines 92.13%. No tests were disabled or thresholds lowered. Milestone A passed 412 tests/27 browser journeys; B passed 426/31; C passed 431/31. All three completed full lint/types/unit/coverage/build/Chromium/audit runs.
+
+New failure record: initial schema/test typing and lint findings were fixed before their commits. The first backup UI browser run exposed loss of focus after Escape; explicit trigger focus restoration fixed it, and the full rerun passed. Its original failed receipt/log was retained. Persistence test typing, erasable-syntax and browser-DOM typing findings were fixed before committing. No new commit knowingly contains a failing check.
+
+Fresh logs and receipts: `C:/Users/Lenovo/Documents/Taskora_engineering_evidence_20261010/roadmap-20261010/`, in milestone-a, milestone-b and milestone-c subdirectories. `commit-manifest.json` records full hashes, messages/purpose/checks/attribution, files and author identity. The original 80 commits were preserved. This continuation made local commits only; the existing draft PR still contains its previously published ten commits.
+
+Reproduce with `npm run lint`, `npm run typecheck`, `npm run test`, `npm run test:coverage`, `npm run build`, `npm run test:e2e` (CI=1 for one worker), and `npm audit`. Chromium and a free port 4173 are required. These are local verification results, not GitHub-hosted CI or all-browser certification.
+
+## Historical relationship milestone report
+
 # Taskora full verification results
 
 Date: 10 October 2026 (Africa/Cairo). Local Windows execution; no remote CI claim.

@@ -1,3 +1,13 @@
+# Current domain/data verification
+
+See [recovery and persistence](TASKORA_RECOVERY_AND_PERSISTENCE.md) for guarantees and the complete new regression scope. Final verification: 431 tests in 59 files and 31 Chromium journeys.
+
+Targeted pre-commit gates: schema/store/membership 31 tests; recovery/gateway/store/IDs 111; backup UI/Settings 6; persistence/store/gateway 100; browser startup/recovery/Settings 11; final integrity/store/recovery/lifecycle 36. TypeScript and applicable ESLint passed before each corresponding commit. The full milestone runs verify compatibility with existing features.
+
+The reference-boundary changes intentionally preserve suspended members' existing assignments and historical events for deleted entities. They reject live nonmember assignees/notification recipients/preference owners, duplicate labels and cross-workspace live activity targets. No blocker-completion policy was imposed.
+
+## Historical relationship regression evidence
+
 # Taskora domain and data test report
 
 Verified on Node 20.19.5 / npm 10.8.2 on Windows. Final implementation snapshot: `2c11d656553a77855ec1767765aed6f099e342d9`.
