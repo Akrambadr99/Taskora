@@ -203,6 +203,31 @@ These are dated local observations. Advisory databases change, and neither a
 passing suite nor a zero-result dependency audit guarantees security or
 correctness. Refresh the evidence when source, dependencies or runtime change.
 
+## Dependency-management engineering increment
+
+Issue details now provide same-project blocking, related and duplicate links,
+including their inverse views, link removal, and parent selection/clearing.
+Both endpoint revisions are checked before relationship writes. Invalid cycles,
+stale writes and denied access leave the data and success history unchanged.
+Parent hierarchies are validated on every snapshot commit, and iterative graph
+validation handles long dependency chains without recursive stack overflow.
+Links are advisory; they do not prevent completing a blocked issue.
+
+The final local increment passed 380 Vitest tests, 25 Chromium journeys, lint,
+types, production build and npm audit (zero reported vulnerabilities). Line
+coverage was 92.26%. The previous dated remediation results above remain a
+historical baseline. These additions are AI-generated and are disclosed in the
+[provenance update](TASKORA_AUTHORSHIP_PROVENANCE_UPDATE.md).
+
+See the [engineering roadmap](TASKORA_40K_ENGINEERING_ROADMAP.md),
+[core architecture](TASKORA_CORE_ARCHITECTURE.md),
+[implementation changelog](TASKORA_IMPLEMENTATION_CHANGELOG.md),
+[domain/data tests](TASKORA_DOMAIN_AND_DATA_TEST_REPORT.md),
+[full verification](TASKORA_FULL_VERIFICATION_RESULTS.md),
+[source count](TASKORA_FINAL_SOURCE_LOC.md) and
+[release readiness](TASKORA_RELEASE_READINESS.md).
+The inclusive first-party candidate count is 32,191; the 40K milestone remains open.
+
 ## Limitations and maintenance
 
 - Authoritative application data has no durable persistence, backup/recovery
