@@ -1,6 +1,8 @@
+import { exportWorkspace, parseWorkspaceArchive, mergeWorkspace, describeChanges, rebaseRevisions } from '../workspace-backup'
 import type { IssueRelation } from '../../domain'
 import type {
   AtlasGateway,
+  WorkspaceRecoveryPreview,
   IssueRelationshipData,
   CreateIssueRelationInput,
   RemoveIssueRelationInput,
@@ -191,6 +193,8 @@ export class MockAtlasGateway implements AtlasGateway {
   private readonly simulator: RequestSimulator
   private readonly tracer: RequestTracer
   private requestSequence = 0
+  private recoveryPreview: { readonly view: WorkspaceRecoveryPreview; readonly data: AtlasDataSnapshot } | null = null
+
 
   constructor(options: MockAtlasGatewayOptions) {
     this.store = options.store
@@ -199,6 +203,85 @@ export class MockAtlasGateway implements AtlasGateway {
     this.ids = options.idGenerator ?? new DeterministicIdGenerator('gateway')
     this.simulator = options.simulator ?? new SimulatedNetwork()
     this.tracer = options.tracer ?? noopRequestTracer
+    this.reserveSnapshotIds()
+  }
+
+  private reserveSnapshotIds(): void {
+    for (const rows of Object.values<readonly { readonly id: string }[]>({ ...this.store.read().data })) {
+      this.ids.reserve(rows.map((row) => row.id))
+    }
+  }
+
+  exportWorkspaceBackup(workspaceId: WorkspaceId, options?: RequestOptions): Promise<string> {
+    return this.execute('workspace.backup.export', options, () => {
+      this.assertPermission('members:manage', workspaceId)
+      return exportWorkspace(this.store.read(), workspaceId, this.clock.now())
+    })
+  }
+
+  previewWorkspaceRecovery(workspaceId: WorkspaceId, content: string, options?: RequestOptions): Promise<WorkspaceRecoveryPreview> {
+    return this.execute('workspace.backup.preview', options, (requestId) => {
+      this.recoveryPreview = null
+      this.assertPermission('members:manage', workspaceId)
+      const archive = parseWorkspaceArchive(content)
+      if (archive.workspaceId !== workspaceId) throw new InvalidGatewayRequestError('This backup belongs to another workspace.')
+      const current = this.store.read()
+      const workspace = current.data.workspaces.find((row) => row.id === workspaceId)
+      if (!workspace) throw new EntityNotFoundError('Workspace')
+      const data = mergeWorkspace(current.data, archive)
+      this.assertRecoveryAuthority(current.data, data, workspaceId)
+      const view: WorkspaceRecoveryPreview = {
+        token: requestId, workspaceId, workspaceName: workspace.name, expectedVersion: current.version,
+        exportedAt: archive.exportedAt,
+        expiresAt: isoDateTime(new Date(new Date(this.clock.now()).valueOf() + 10 * 60_000).toISOString()),
+        changes: describeChanges(current.data, data),
+      }
+      this.recoveryPreview = { view, data }
+      return structuredClone(view)
+    })
+  }
+
+  restoreWorkspaceBackup(input: { readonly token: string; readonly workspaceId: WorkspaceId; readonly confirmation: string }, options?: RequestOptions): Promise<void> {
+    return this.execute('workspace.backup.restore', options, (requestId) => {
+      this.assertPermission('members:manage', input.workspaceId)
+      const preview = this.recoveryPreview
+      if (preview?.view.token !== input.token || preview.view.workspaceId !== input.workspaceId) {
+        throw new GatewayConflictError('Recovery preview is no longer available. Preview the backup again.')
+      }
+      if (input.confirmation !== preview.view.workspaceName) throw new InvalidGatewayRequestError('Type the current workspace name to confirm replacement.')
+      const current = this.store.read()
+      if (current.version !== preview.view.expectedVersion || this.clock.now() >= preview.view.expiresAt) {
+        this.recoveryPreview = null
+        throw new GatewayConflictError('Workspace changed or the preview expired. Preview the backup again.')
+      }
+      this.assertRecoveryAuthority(current.data, preview.data, input.workspaceId)
+      const data = rebaseRevisions(current.data, preview.data, input.workspaceId)
+      this.ids.reserve(data.auditEvents.map((event) => event.id))
+      const audit: AuditEvent = { id: this.ids.audit('recovery'), workspaceId: input.workspaceId,
+        actorId: this.actorId, requestId, action: 'workspace.recovered', outcome: 'succeeded',
+        occurredAt: this.clock.now(), metadata: { previousVersion: current.version, exportedAt: preview.view.exportedAt },
+      }
+      this.store.restore(current.version, { ...data, auditEvents: [...data.auditEvents, audit] })
+      this.recoveryPreview = null
+      this.reserveSnapshotIds()
+    })
+  }
+
+  private assertRecoveryAuthority(current: AtlasDataSnapshot, next: AtlasDataSnapshot, workspaceId: WorkspaceId): void {
+    const actor = current.memberships.find((row) => row.workspaceId === workspaceId && row.userId === this.actorId)
+    const restored = next.memberships.find((row) => row.workspaceId === workspaceId && row.userId === this.actorId)
+    if (!actor || restored?.status !== 'active' || restored.role !== actor.role) {
+      throw new ForbiddenGatewayError('Recovery must preserve your active workspace role.')
+    }
+    if (!next.memberships.some((row) => row.workspaceId === workspaceId && row.role === 'owner' && row.status === 'active')) {
+      throw new InvalidGatewayRequestError('Recovery requires an active workspace owner.')
+    }
+    if (actor.role !== 'owner') {
+      const owners = (data: AtlasDataSnapshot) => data.memberships
+        .filter((row) => row.workspaceId === workspaceId && row.role === 'owner')
+        .map((row) => `${row.id}:${row.userId}:${row.status}`).sort().join('|')
+      if (owners(current) !== owners(next)) throw new ForbiddenGatewayError('Only an owner may change owner memberships during recovery.')
+    }
   }
 
   getWorkspaceActivity(
@@ -2846,6 +2929,7 @@ export class MockAtlasGateway implements AtlasGateway {
     perform: (requestId: string) => T,
   ): Promise<T> {
     const requestId = this.nextRequestId()
+    const recoveryEpoch = this.store.recoveryEpoch
     this.trace(requestId, operation, 'started')
 
     try {
@@ -2855,6 +2939,10 @@ export class MockAtlasGateway implements AtlasGateway {
         throw new RequestCancelledError()
       }
 
+      if (recoveryEpoch !== this.store.recoveryEpoch) {
+        this.reserveSnapshotIds()
+        throw new GatewayConflictError('Workspace was recovered while this request was pending. Refresh and try again.')
+      }
       const result = perform(requestId)
       this.trace(requestId, operation, 'succeeded')
       return result

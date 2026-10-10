@@ -18,6 +18,14 @@ export class StaleSnapshotError extends Error {
 export class InMemoryDataStore {
   private data: AtlasDataSnapshot
   private version = 0
+  private recoverySequence = 0
+
+  get recoveryEpoch(): number { return this.recoverySequence }
+
+  restore(expectedVersion: number, nextData: AtlasDataSnapshot): void {
+    this.commit(expectedVersion, nextData)
+    this.recoverySequence += 1
+  }
 
   constructor(seed: AtlasDataSnapshot) {
     assertValidSnapshot(seed)

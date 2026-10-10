@@ -2,6 +2,9 @@ import type { GatewayErrorCode } from './errors'
 import type { IsoDateTime } from '../../domain'
 
 export type GatewayOperation =
+  | 'workspace.backup.export'
+  | 'workspace.backup.preview'
+  | 'workspace.backup.restore'
   | 'activity.list'
   | 'administration.invitations.get'
   | 'administration.invitations.create'

@@ -1,3 +1,4 @@
+import type { CollectionChange } from '../workspace-backup'
 import type {
   Issue,
   IssueRelation,
@@ -835,8 +836,24 @@ export interface NotificationGateway {
   ): Promise<NotificationPreferences>
 }
 
+export interface WorkspaceRecoveryPreview {
+  readonly token: string
+  readonly workspaceId: WorkspaceId
+  readonly workspaceName: string
+  readonly expectedVersion: number
+  readonly exportedAt: IsoDateTime
+  readonly expiresAt: IsoDateTime
+  readonly changes: readonly CollectionChange[]
+}
+
+export interface WorkspaceBackupGateway {
+  exportWorkspaceBackup(workspaceId: WorkspaceId, options?: RequestOptions): Promise<string>
+  previewWorkspaceRecovery(workspaceId: WorkspaceId, content: string, options?: RequestOptions): Promise<WorkspaceRecoveryPreview>
+  restoreWorkspaceBackup(input: { readonly token: string; readonly workspaceId: WorkspaceId; readonly confirmation: string }, options?: RequestOptions): Promise<void>
+}
+
 export interface AtlasGateway
-  extends AuthorizationGateway,
+  extends WorkspaceBackupGateway, AuthorizationGateway,
     CollaborationGateway,
     IssueGateway,
     NotificationGateway,
