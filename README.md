@@ -31,6 +31,26 @@ through each project's workflow.
 The repository was originally developed as **Atlas Ops**. The current application
 still displays that name; the screenshots below show the actual app, unchanged.
 
+## AI code review and regression testing
+
+I have used Taskora to evaluate AI-generated code, correct interaction bugs, and design benchmarks and tests for asynchronous React/TypeScript behavior. Its typed gateway makes latency, cancellation, revision conflicts, and network failures controllable during review.
+
+- **Reproducible failure scenarios:** defined deterministic request delays, cancellation, and injected failures to check recovery without relying on an external service. [Network simulation tests](src/data/gateway/simulation.test.ts)
+- **Fix and regression review:** tested optimistic board rollback, preserved drafts after conflicts, duplicate comment submissions, permission changes, and keyboard/focus recovery. [Board tests](src/app/pages/BoardPage.test.tsx) · [Issue-detail tests](src/app/pages/IssueDetailPage.test.tsx)
+- **Task and test design:** use state transitions and gateway contracts to assess whether a proposed patch fixes the reported behavior while preserving related interactions. [Query-cache tests](src/app/query/issue-cache.test.ts)
+
+The application data layer is in memory; browser preferences use local storage. The linked tests provide public examples of the engineering behaviors under review.
+
+After the documented local setup, run the existing checks:
+
+```sh
+npm run check
+npx playwright install chromium
+npm run test:e2e
+```
+
+`check` includes linting, Vitest, type checking, and the build. Playwright exercises journeys through the running application.
+
 ## Product tour
 
 ### Start with the bigger picture
